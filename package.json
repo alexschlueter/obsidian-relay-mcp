@@ -1,0 +1,33 @@
+{
+  "name": "mcp-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Headless relay-core library for reading and updating Relay-backed Obsidian notes over Yjs.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "choose:target": "tsc -p tsconfig.json && node dist/bin/relay-choose-target.js",
+    "login:github": "tsc -p tsconfig.json && node dist/bin/relay-github-login.js",
+    "test": "vitest run",
+    "test:live": "vitest run test/liveRelay.integration.test.ts"
+  },
+  "dependencies": {
+    "diff-match-patch": "^1.0.5",
+    "pocketbase": "^0.20.3",
+    "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "@types/diff-match-patch": "^1.0.36",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
