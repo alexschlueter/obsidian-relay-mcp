@@ -1,5 +1,5 @@
 ---
-name: Obsidian
+name: obsidian
 description: Use Obsidian MCP tools for reading, patching, and live collaborative Markdown editing.
 ---
 
@@ -108,16 +108,6 @@ read_text { path: "Notes/Inbox.md" }
 apply_patch { patchHandle: "h7k2p", patch: "...Codex update patch..." }
 ```
 
-Answer "what is selected?" or "rewrite this":
-
-```text
-open_edit_session { path: "Drafts/Essay.md", agentName: "Claw" }
-get_cursor_context { sessionId: "k8d3q" }
-delete_selection { sessionId: "k8d3q" }
-insert_text { sessionId: "k8d3q", text: "replacement text" }
-clear_selection { sessionId: "k8d3q" }
-```
-
 Edit where a collaborator is working:
 
 ```text
@@ -131,14 +121,3 @@ Append to a note in live mode:
 place_cursor_at_document_boundary { sessionId: "k8d3q", boundary: "end" }
 insert_text { sessionId: "k8d3q", text: "\n\nNew paragraph..." }
 ```
-
-## Behavior Guidelines
-
-- If the user asks to edit the note, edit with tools instead of replying with
-  the full replacement text in chat.
-- Always inspect the document before non-trivial edits.
-- Ask a clarifying question only when the target or intent is genuinely
-  ambiguous.
-- Preserve exact user-provided text unless asked to rewrite or improve it.
-- After editing, give one short summary of what changed. Do not claim a change
-  if no tool changed the document.
