@@ -166,14 +166,13 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       description:
         "Returns context around this session's agent cursor, or around a matching Obsidian collaborator cursor. " +
         "If there is an active selection, also returns the selected text and exact range.\n" +
-        "For your own cursor, leave userId, userName, and clientId undefined. To discover collaborator identities, call list_active_cursors.\n\n" +
+        "For your own cursor, leave userId and clientId undefined. To discover collaborator identities, call list_active_cursors, then use either id.\n\n" +
         "Use this when the user refers to \"here\" or \"this\" or the current selection and you want to inspect it before editing.",
       inputSchema: {
         sessionId: handleSchema,
         maxCharsBefore: nonNegativeIntegerSchema.optional(),
         maxCharsAfter: nonNegativeIntegerSchema.optional(),
         userId: z.string().min(1).optional().describe("Optional collaborator user id to inspect."),
-        userName: z.string().min(1).optional().describe("Optional collaborator display name to inspect."),
         clientId: nonNegativeIntegerSchema.optional().describe("Optional collaborator client id to inspect."),
       },
       annotations: {
@@ -188,7 +187,6 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
           ...(maxCharsBefore === undefined ? {} : { maxCharsBefore }),
           ...(maxCharsAfter === undefined ? {} : { maxCharsAfter }),
           ...(userId === undefined ? {} : { userId }),
-          ...(userName === undefined ? {} : { userName }),
           ...(clientId === undefined ? {} : { clientId }),
         }),
       ),
@@ -198,7 +196,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     "list_active_cursors",
     {
       title: "List Active Obsidian Cursors",
-      description: "List active collaborator cursor and selection states visible in a live edit session.",
+      description: "List active collaborator cursor and selection states visible in a live edit session, including userId and clientId for use in get_cursor_context.",
       inputSchema: {
         sessionId: handleSchema,
       },
@@ -220,7 +218,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     {
       title: "Search Obsidian Markdown",
       description:
-        "Search the current Obsidian note text and store stable internal anchors behind short match ids.",
+        'Search for exact text inside the document and return stable match ids with surrounding context.',
       inputSchema: {
         sessionId: handleSchema,
         query: z.string().min(1),
@@ -239,11 +237,10 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
   server.registerTool(
     "replace_matches",
     {
-      title: "Replace Live Matches",
+      title: "Replace Matches",
       description:
-        "Replace one or more previously returned match ids in the current Obsidian note. sessionId is optional when match ids identify one known session.",
+        'Replace multiple previously found exact matches in one step. Use this after search_text when the user wants the same exact text changed in several places, such as renaming a character throughout the document.',
       inputSchema: {
-        sessionId: handleSchema.optional(),
         matchIds: z.array(handleSchema).describe("Match ids returned by search_text."),
         text: z.string(),
       },
@@ -253,11 +250,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
         openWorldHint: false,
       },
     },
-    async ({ sessionId, matchIds, text }) =>
+    async ({ matchIds, text }) =>
       runRelayTool(async () => {
-        if (sessionId) {
-          return core.replaceMatches(sessionId, matchIds, text);
-        }
         return core.replaceMatches(matchIds, text);
       }),
   );
@@ -267,9 +261,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     {
       title: "Place Agent Cursor At Match",
       description:
-        "Move the session's agent cursor to a stored match. sessionId is optional when the match id identifies one known session.",
+        'Place the agent cursor at the start or end of a previously returned match id from search_text.',
       inputSchema: {
-        sessionId: handleSchema.optional(),
         matchId: handleSchema,
         edge: cursorEdgeSchema.optional().describe("Whether to place the cursor at the start or end of the match. Defaults to start."),
       },
@@ -279,11 +272,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
         openWorldHint: false,
       },
     },
-    async ({ sessionId, matchId, edge }) =>
+    async ({ matchId, edge }) =>
       runRelayTool(async () => {
-        if (sessionId) {
-          return core.placeCursor(sessionId, matchId, edge);
-        }
         return core.placeCursor(matchId, edge);
       }),
   );
@@ -292,7 +282,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     "place_cursor_at_document_boundary",
     {
       title: "Place Agent Cursor At Document Boundary",
-      description: "Move the session's agent cursor to the start or end of the Obsidian note.",
+      description: 
+        'Place the agent cursor at the very start or very end of the document. Use this for requests like adding a title at the top or appending exact text at the end.',
       inputSchema: {
         sessionId: handleSchema,
         boundary: cursorEdgeSchema,
@@ -310,11 +301,9 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
   server.registerTool(
     "select_text",
     {
-      title: "Select Live Match Text",
-      description:
-        "Select the text for a stored match. sessionId is optional when the match id identifies one known session.",
+      title: "Select Match Text",
+      description: 'Select the exact text represented by a previously returned match id from search_text.',
       inputSchema: {
-        sessionId: handleSchema.optional(),
         matchId: handleSchema,
       },
       annotations: {
@@ -323,11 +312,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
         openWorldHint: false,
       },
     },
-    async ({ sessionId, matchId }) =>
+    async ({ matchId }) =>
       runRelayTool(async () => {
-        if (sessionId) {
-          return core.selectText(sessionId, matchId);
-        }
         return core.selectText(matchId);
       }),
   );
@@ -336,7 +322,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     "select_current_block",
     {
       title: "Select Current Markdown Block",
-      description: "Select the Markdown source block around the session's agent cursor.",
+      description:
+        'Select the full current text block around the cursor. Use this for formatting or rewriting the current line/paragraph when you already know the cursor is in the right block.',
       inputSchema: {
         sessionId: handleSchema,
       },
@@ -353,11 +340,10 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
   server.registerTool(
     "select_between_matches",
     {
-      title: "Select Between Live Matches",
+      title: "Select Between Matches",
       description:
-        "Select a Markdown range between two stored match ids. sessionId is optional when both ids identify one known session.",
+        'Create a selection between two previously returned matches from search_text, choosing start/end edges for each.',
       inputSchema: {
-        sessionId: handleSchema.optional(),
         startMatchId: handleSchema,
         endMatchId: handleSchema,
         startEdge: cursorEdgeSchema.optional(),
@@ -369,17 +355,8 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
         openWorldHint: false,
       },
     },
-    async ({ sessionId, startMatchId, endMatchId, startEdge, endEdge }) =>
+    async ({ startMatchId, endMatchId, startEdge, endEdge }) =>
       runRelayTool(async () => {
-        if (sessionId) {
-          return core.selectBetweenMatches(
-            sessionId,
-            startMatchId,
-            endMatchId,
-            startEdge,
-            endEdge,
-          );
-        }
         return core.selectBetweenMatches(startMatchId, endMatchId, startEdge, endEdge);
       }),
   );
@@ -388,7 +365,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     "clear_selection",
     {
       title: "Clear Agent Selection",
-      description: "Collapse the current agent selection to a cursor.",
+      description: 'Clear the current selection while keeping the current cursor target.',
       inputSchema: {
         sessionId: handleSchema,
       },
