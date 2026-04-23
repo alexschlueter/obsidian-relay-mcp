@@ -218,14 +218,20 @@ export class RelayCore {
     return { sessionId };
   }
 
-  closeEditSession(sessionId: string): boolean {
+  async closeEditSession(sessionId: string): Promise<boolean> {
     const stored = this.editSessions.get(sessionId);
     if (!stored) {
       return false;
     }
-    stored.session.destroy();
-    this.editSessions.delete(sessionId);
-    return true;
+    return stored.lock.runExclusive(async () => {
+      const freshStored = this.editSessions.get(sessionId);
+      if (!freshStored) {
+        return false;
+      }
+      freshStored.session.destroy();
+      this.editSessions.delete(sessionId);
+      return true;
+    });
   }
 
   async getCursorContext(

@@ -211,7 +211,7 @@ interface FakeRelayCore {
   readText(path: string, options?: unknown): Promise<unknown>;
   patchText(...args: unknown[]): Promise<unknown>;
   openEditSession(path: string, ttlSeconds?: number): Promise<unknown>;
-  closeEditSession(sessionId: string): boolean;
+  closeEditSession(sessionId: string): Promise<boolean>;
   getCursorContext(sessionId: string, options?: unknown): Promise<unknown>;
   listActiveCursors(sessionId: string): Promise<unknown>;
   searchText(sessionId: string, query: string, maxResults?: number): Promise<unknown>;
@@ -257,7 +257,7 @@ function createFakeRelayCore(): FakeRelayCore {
       calls.push({ method: "openEditSession", args: [path, ttlSeconds] });
       return { sessionId: "11111" };
     },
-    closeEditSession(sessionId) {
+    async closeEditSession(sessionId) {
       calls.push({ method: "closeEditSession", args: [sessionId] });
       return true;
     },

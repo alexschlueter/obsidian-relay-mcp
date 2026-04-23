@@ -16,6 +16,8 @@
     "check": "tsc -p tsconfig.json --noEmit",
     "choose:target": "tsc -p tsconfig.json && node dist/bin/relay-choose-target.js",
     "login:github": "tsc -p tsconfig.json && node dist/bin/relay-github-login.js",
+    "mcp:http": "tsc -p tsconfig.json && node dist/bin/mcp-relay-http.js",
+    "mcp:stdio": "tsc -p tsconfig.json && node dist/bin/mcp-relay-stdio.js",
     "test": "vitest run",
     "test:live": "vitest run test/liveRelay.integration.test.ts"
   },

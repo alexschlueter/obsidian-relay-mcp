@@ -155,7 +155,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     async ({ sessionId }) =>
       runRelayTool(async () => ({
         ok: true,
-        closed: core.closeEditSession(sessionId),
+        closed: await core.closeEditSession(sessionId),
       })),
   );
 
@@ -181,7 +181,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
         openWorldHint: false,
       },
     },
-    async ({ sessionId, maxCharsBefore, maxCharsAfter, userId, userName, clientId }) =>
+    async ({ sessionId, maxCharsBefore, maxCharsAfter, userId, clientId }) =>
       runRelayTool(async () =>
         core.getCursorContext(sessionId, {
           ...(maxCharsBefore === undefined ? {} : { maxCharsBefore }),
@@ -242,7 +242,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
         'Replace multiple previously found exact matches in one step. Use this after search_text when the user wants the same exact text changed in several places, such as renaming a character throughout the document.',
       inputSchema: {
         matchIds: z.array(handleSchema).describe("Match ids returned by search_text."),
-        text: z.string(),
+        text: z.string().describe("Text to replace all matches with."),
       },
       annotations: {
         readOnlyHint: false,

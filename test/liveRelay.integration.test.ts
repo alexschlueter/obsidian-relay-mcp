@@ -65,7 +65,7 @@ describeLive("Relay live integration", () => {
           hasSelection: false,
         });
       } finally {
-        relay.closeEditSession(sessionId);
+        await relay.closeEditSession(sessionId);
       }
     },
     timeoutMs,
@@ -281,7 +281,7 @@ describeLive("Relay live integration", () => {
         console.log(`[live-relay] live edit-session methods exercised on ${notePath}`);
       } finally {
         if (sessionId) {
-          relay.closeEditSession(sessionId);
+          await relay.closeEditSession(sessionId);
         }
 
         const cleanupRead = await relay.readText(notePath);
