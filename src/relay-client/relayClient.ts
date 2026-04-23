@@ -26,6 +26,7 @@ export interface RelayClientConfig extends RelayAuthClientOptions {
 
 export const DEFAULT_HANDLE_TTL_SECONDS = 60;
 export const RELAY_HANDLE_LENGTH = 5;
+const EDIT_SESSION_TOMBSTONE_TTL_MS = 10 * 60 * 1000;
 
 export interface RelayReadResult {
   patchHandle: string;
@@ -56,13 +57,36 @@ export interface RelayApplyPatchResult {
   resultText?: string;
 }
 
+export type RelayListedFileKind = "markdown" | "canvas" | "attachment" | "folder";
+
+export interface RelayListFilesOptions {
+  query?: string;
+  pathPrefix?: string;
+  maxResults?: number;
+  offset?: number;
+}
+
+export interface RelayListedFile {
+  path: string;
+  kind: RelayListedFileKind;
+}
+
+export interface RelayListFilesResult {
+  ok: true;
+  entries: RelayListedFile[];
+  totalMatches: number;
+  returnedCount: number;
+  offset: number;
+  nextOffset?: number;
+}
+
 type RelayReadArgs =
   | [string, (number | RelayReadTextOptions)?]
   | [string, string, string, (number | RelayReadTextOptions)?];
 type RelayApplyPatchArgs = [string, string, RelayApplyPatchOptions?] | [string, string, string, RelayApplyPatchOptions?];
 type RelayOpenEditSessionArgs =
-  | [string, number?]
-  | [string, string, string, number?];
+  | [string, string, number?]
+  | [string, string, string, string, number?];
 
 export interface RelayWriteResult {
   relayId: string;
@@ -83,6 +107,7 @@ export class RelayClient {
   private readonly liveProviderOptions: LiveRelayProviderOptions;
   private readonly handles = new Map<string, StoredHandle>();
   private readonly editSessions = new Map<string, StoredEditSession>();
+  private readonly editSessionTombstones = new Map<string, EditSessionTombstone>();
   private nextIdNumber = 0;
 
   constructor(config: RelayClientConfig) {
@@ -135,6 +160,38 @@ export class RelayClient {
     return folder.getByPath(notePath);
   }
 
+  async listFiles(options: RelayListFilesOptions = {}): Promise<RelayListFilesResult> {
+    const folder = await this.loadFolder();
+    const query = options.query?.trim().toLocaleLowerCase();
+    const pathPrefix = normalizeListPathPrefix(options.pathPrefix);
+    const maxResults = parseListFilesMaxResults(options.maxResults);
+    const offset = parseListFilesOffset(options.offset);
+
+    const matches = folder
+      .entries()
+      .filter((entry) => matchesListPathPrefix(entry.path, pathPrefix))
+      .filter((entry) => !query || entry.path.toLocaleLowerCase().includes(query))
+      .map((entry) => ({
+        path: entry.path,
+        kind: listedFileKindFromEntry(entry),
+      }))
+      .sort((left, right) => left.path.localeCompare(right.path));
+
+    const entries = matches.slice(offset, offset + maxResults);
+    const nextOffset = offset + entries.length < matches.length
+      ? offset + entries.length
+      : undefined;
+
+    return {
+      ok: true,
+      entries,
+      totalMatches: matches.length,
+      returnedCount: entries.length,
+      offset,
+      ...(nextOffset === undefined ? {} : { nextOffset }),
+    };
+  }
+
   async readText(path: string, options?: number | RelayReadTextOptions): Promise<RelayReadResult>;
   async readText(
     relayId: string,
@@ -171,17 +228,18 @@ export class RelayClient {
     };
   }
 
-  async openEditSession(path: string, ttlSeconds?: number): Promise<OpenEditSessionResult>;
+  async openEditSession(path: string, agentName: string, ttlSeconds?: number): Promise<OpenEditSessionResult>;
   async openEditSession(
     relayId: string,
     folderId: string,
     path: string,
+    agentName: string,
     ttlSeconds?: number,
   ): Promise<OpenEditSessionResult>;
   async openEditSession(...args: RelayOpenEditSessionArgs): Promise<OpenEditSessionResult> {
     this.cleanupExpiredState();
 
-    const { address, ttlMs } = this.parseOpenEditSessionArgs(args);
+    const { address, agentName, ttlMs } = this.parseOpenEditSessionArgs(args);
     const resolved = await this.resolveTextDocumentResource(address);
     const sessionId = this.issueId();
     const ydoc = new Y.Doc();
@@ -207,6 +265,7 @@ export class RelayClient {
       resolved.clientToken,
       ydoc,
       provider,
+      agentName,
       () => this.issueId(),
     );
     this.editSessions.set(sessionId, {
@@ -230,6 +289,7 @@ export class RelayClient {
       }
       freshStored.session.destroy();
       this.editSessions.delete(sessionId);
+      this.rememberEditSessionTombstone(sessionId, "closed");
       return true;
     });
   }
@@ -578,8 +638,10 @@ export class RelayClient {
       if (stored.expiresAt <= now && !stored.lock.locked) {
         stored.session.destroy();
         this.editSessions.delete(sessionId);
+        this.rememberEditSessionTombstone(sessionId, "expired");
       }
     }
+    this.cleanupEditSessionTombstones(now);
   }
 
   private getHandle(handle: string): StoredHandle {
@@ -605,14 +667,37 @@ export class RelayClient {
   private getEditSession(sessionId: string): StoredEditSession {
     const stored = this.editSessions.get(sessionId);
     if (!stored) {
+      const tombstone = this.editSessionTombstones.get(sessionId);
+      if (tombstone?.reason === "closed") {
+        throw new Error(`Closed Relay edit session: ${sessionId}`);
+      }
+      if (tombstone?.reason === "expired") {
+        throw new Error(`Expired Relay edit session: ${sessionId}`);
+      }
       throw new Error(`Unknown Relay edit session: ${sessionId}`);
     }
     if (stored.expiresAt <= Date.now()) {
       stored.session.destroy();
       this.editSessions.delete(sessionId);
-      throw new Error(`Relay edit session expired: ${sessionId}`);
+      this.rememberEditSessionTombstone(sessionId, "expired");
+      throw new Error(`Expired Relay edit session: ${sessionId}`);
     }
     return stored;
+  }
+
+  private rememberEditSessionTombstone(sessionId: string, reason: EditSessionTombstoneReason): void {
+    this.editSessionTombstones.set(sessionId, {
+      reason,
+      forgetAt: Date.now() + EDIT_SESSION_TOMBSTONE_TTL_MS,
+    });
+  }
+
+  private cleanupEditSessionTombstones(now: number): void {
+    for (const [sessionId, tombstone] of this.editSessionTombstones.entries()) {
+      if (tombstone.forgetAt <= now) {
+        this.editSessionTombstones.delete(sessionId);
+      }
+    }
   }
 
   private async withEditSession<T>(
@@ -715,25 +800,33 @@ export class RelayClient {
 
   private parseOpenEditSessionArgs(
     args: RelayOpenEditSessionArgs,
-  ): { address: TextAddress; ttlMs: number } {
-    if (args.length === 1 || args.length === 2) {
+  ): { address: TextAddress; agentName: string; ttlMs: number } {
+    if (args.length === 2 || (args.length === 3 && (typeof args[2] === "number" || args[2] === undefined))) {
       const coordinates = this.resolveFolderCoordinates();
       return {
         address: {
           ...coordinates,
           path: normalizeRelayPath(args[0]),
         },
-        ttlMs: parseTtlSeconds(args[1]),
+        agentName: parseAgentName(args[1]),
+        ttlMs: parseTtlSeconds(args[2]),
       };
     }
 
-    const [relayId, folderId, rawPath, ttlSeconds] = args as [string, string, string, number?];
+    if (args.length !== 4 && args.length !== 5) {
+      throw new Error(
+        "openEditSession requires agentName: use openEditSession(path, agentName, ttlSeconds?)",
+      );
+    }
+
+    const [relayId, folderId, rawPath, rawAgentName, ttlSeconds] = args as [string, string, string, string, number?];
     return {
       address: {
         relayId,
         folderId,
         path: normalizeRelayPath(rawPath),
       },
+      agentName: parseAgentName(rawAgentName),
       ttlMs: parseTtlSeconds(ttlSeconds),
     };
   }
@@ -818,6 +911,13 @@ interface StoredEditSession {
   ttlMs: number;
 }
 
+type EditSessionTombstoneReason = "closed" | "expired";
+
+interface EditSessionTombstone {
+  forgetAt: number;
+  reason: EditSessionTombstoneReason;
+}
+
 function toFolderResource(relayId: string, folderId: string) {
   return new S3RemoteFolder(relayId, folderId);
 }
@@ -853,6 +953,20 @@ function parseTtlSeconds(ttlSeconds: number | undefined): number {
     throw new Error(`Expected a positive TTL in seconds, received ${ttlSeconds}`);
   }
   return ttlSeconds * 1000;
+}
+
+function parseAgentName(agentName: unknown): string {
+  if (typeof agentName !== "string") {
+    throw new Error("Expected a non-empty agentName");
+  }
+  const trimmed = agentName.trim();
+  if (!trimmed) {
+    throw new Error("Expected a non-empty agentName");
+  }
+  if (trimmed.length > 100) {
+    throw new Error("Expected agentName to be at most 100 characters");
+  }
+  return trimmed;
 }
 
 function parseReadOptions(rawOptions: number | RelayReadTextOptions | undefined): {
@@ -977,6 +1091,55 @@ function cloneUint8Array(value: Uint8Array): Uint8Array {
   return new Uint8Array(value);
 }
 
+function normalizeListPathPrefix(pathPrefix: string | undefined): string | undefined {
+  if (pathPrefix === undefined) {
+    return undefined;
+  }
+  return normalizeRelayPath(pathPrefix).replace(/\/+$/, "");
+}
+
+function matchesListPathPrefix(path: string, pathPrefix: string | undefined): boolean {
+  if (!pathPrefix) {
+    return true;
+  }
+  return path === pathPrefix || path.startsWith(`${pathPrefix}/`);
+}
+
+function parseListFilesMaxResults(maxResults: number | undefined): number {
+  if (maxResults === undefined) {
+    return DEFAULT_LIST_FILES_MAX_RESULTS;
+  }
+  if (!Number.isFinite(maxResults) || maxResults <= 0) {
+    throw new Error(`Expected a positive maxResults value, received ${maxResults}`);
+  }
+  return Math.min(Math.trunc(maxResults), MAX_LIST_FILES_MAX_RESULTS);
+}
+
+function parseListFilesOffset(offset: number | undefined): number {
+  if (offset === undefined) {
+    return 0;
+  }
+  if (!Number.isFinite(offset) || offset < 0) {
+    throw new Error(`Expected a non-negative offset value, received ${offset}`);
+  }
+  return Math.trunc(offset);
+}
+
+function listedFileKindFromEntry(entry: FolderEntry): RelayListedFileKind {
+  if (entry.resourceKind === "folder") {
+    return "folder";
+  }
+  if (entry.resourceKind === "canvas") {
+    return "canvas";
+  }
+  if (entry.resourceKind === "document") {
+    return "markdown";
+  }
+  return "attachment";
+}
+
+const DEFAULT_LIST_FILES_MAX_RESULTS = 50;
+const MAX_LIST_FILES_MAX_RESULTS = 200;
 const RELAY_HANDLE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const RELAY_HANDLE_RADIX = RELAY_HANDLE_ALPHABET.length;
 const MAX_RELAY_HANDLE_COUNT = RELAY_HANDLE_RADIX ** RELAY_HANDLE_LENGTH;

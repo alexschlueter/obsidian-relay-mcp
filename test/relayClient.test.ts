@@ -12,6 +12,75 @@ const noteDocId = "44444444-4444-4444-4444-444444444444";
 const notePath = "Notes/Test.md";
 
 describe("RelayClient handle editing", () => {
+  it("lists configured folder paths with query, prefix, kinds, and pagination", async () => {
+    const harness = createHarness("hello");
+    harness.addFolderEntry("Projects/Alpha.md", {
+      id: "55555555-5555-5555-5555-555555555555",
+      type: "markdown",
+    });
+    harness.addFolderEntry("Projects/Alpha.canvas", {
+      id: "66666666-6666-6666-6666-666666666666",
+      type: "canvas",
+    });
+    harness.addFolderEntry("Projects/Assets/logo.png", {
+      id: "77777777-7777-7777-7777-777777777777",
+      type: "image",
+    });
+    harness.addFolderEntry("Archive/Alpha.md", {
+      id: "88888888-8888-8888-8888-888888888888",
+      type: "markdown",
+    });
+
+    const relay = harness.createRelay();
+    const firstPage = await relay.listFiles({
+      query: "alpha",
+      pathPrefix: "Projects",
+      maxResults: 1,
+    });
+
+    expect(firstPage).toEqual({
+      ok: true,
+      entries: [
+        {
+          path: "Projects/Alpha.canvas",
+          kind: "canvas",
+        },
+      ],
+      totalMatches: 2,
+      returnedCount: 1,
+      offset: 0,
+      nextOffset: 1,
+    });
+
+    const secondPage = await relay.listFiles({
+      query: "alpha",
+      pathPrefix: "Projects",
+      maxResults: 1,
+      offset: firstPage.nextOffset,
+    });
+
+    expect(secondPage).toEqual({
+      ok: true,
+      entries: [
+        {
+          path: "Projects/Alpha.md",
+          kind: "markdown",
+        },
+      ],
+      totalMatches: 2,
+      returnedCount: 1,
+      offset: 1,
+    });
+
+    const attachments = await relay.listFiles({ query: "logo" });
+    expect(attachments.entries).toEqual([
+      {
+        path: "Projects/Assets/logo.png",
+        kind: "attachment",
+      },
+    ]);
+  });
+
   it("returns a fresh handle for each read and applies update-file patches", async () => {
     const harness = createHarness("hello world\n");
     const relay = harness.createRelay();
@@ -134,12 +203,45 @@ describe("RelayClient handle editing", () => {
 });
 
 describe("RelayClient live edit sessions", () => {
+  it("reports unknown edit sessions distinctly", async () => {
+    const harness = createHarness("live hello");
+    const relay = harness.createRelay();
+
+    await expect(relay.searchText("abcde", "hello")).rejects.toThrow(
+      "Unknown Relay edit session: abcde",
+    );
+  });
+
+  it("reports closed edit sessions distinctly", async () => {
+    const harness = createHarness("live hello");
+    const relay = harness.createRelay({ liveWebSocket: true });
+
+    const { sessionId } = await relay.openEditSession(notePath, "Test Agent");
+    await expect(relay.closeEditSession(sessionId)).resolves.toBe(true);
+
+    await expect(relay.searchText(sessionId, "hello")).rejects.toThrow(
+      `Closed Relay edit session: ${sessionId}`,
+    );
+  });
+
+  it("reports expired edit sessions distinctly", async () => {
+    const harness = createHarness("live hello");
+    const relay = harness.createRelay({ liveWebSocket: true });
+
+    const { sessionId } = await relay.openEditSession(notePath, "Test Agent", 0.001);
+    await sleep(15);
+
+    await expect(relay.searchText(sessionId, "hello")).rejects.toThrow(
+      `Expired Relay edit session: ${sessionId}`,
+    );
+  });
+
   it("hydrates the note document over websocket instead of fetching note content over HTTP", async () => {
     const harness = createHarness("live hello");
     harness.failNoteAsUpdate = true;
     const relay = harness.createRelay({ liveWebSocket: true });
 
-    const { sessionId } = await relay.openEditSession(notePath);
+    const { sessionId } = await relay.openEditSession(notePath, "Test Agent");
     const match = (await relay.searchText(sessionId, "hello")).matches[0]!;
 
     await relay.selectText(sessionId, match.matchId);
@@ -227,6 +329,9 @@ function createHarness(initialText: string) {
     },
     createRelay(options: { liveWebSocket?: boolean } = {}) {
       return this.createRelayWithOptions(options);
+    },
+    addFolderEntry(path: string, meta: { id: string; type: string }) {
+      folderDoc.getMap("filemeta_v0").set(path, meta);
     },
     get failNextUpdate() {
       return failNextUpdate;

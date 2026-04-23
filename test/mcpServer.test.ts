@@ -83,6 +83,46 @@ describe("Relay MCP server", () => {
     });
   });
 
+  it("maps list_files camelCase args to RelayClient listFiles", async () => {
+    const fakeClient = createFakeRelayClient();
+
+    await withMcpClient(fakeClient, async ({ client }) => {
+      const result = await client.callTool({
+        name: "list_files",
+        arguments: {
+          query: "plan",
+          pathPrefix: "Projects",
+          maxResults: 25,
+          offset: 50,
+        },
+      });
+
+      expect(result.structuredContent).toEqual({
+        ok: true,
+        entries: [
+          {
+            path: "Projects/Plan.md",
+            kind: "markdown",
+          },
+        ],
+        totalMatches: 1,
+        returnedCount: 1,
+        offset: 50,
+      });
+      expect(fakeClient.calls).toContainEqual({
+        method: "listFiles",
+        args: [
+          {
+            query: "plan",
+            pathPrefix: "Projects",
+            maxResults: 25,
+            offset: 50,
+          },
+        ],
+      });
+    });
+  });
+
   it("maps apply_patch camelCase args to RelayClient patchText", async () => {
     const fakeClient = createFakeRelayClient();
 
@@ -121,13 +161,14 @@ describe("Relay MCP server", () => {
         name: "open_edit_session",
         arguments: {
           path: "Notes/Test.md",
+          agentName: "Codex",
         },
       });
 
       expect(result.structuredContent).toEqual({ sessionId: "11111" });
       expect(fakeClient.calls).toContainEqual({
         method: "openEditSession",
-        args: ["Notes/Test.md", MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS],
+        args: ["Notes/Test.md", "Codex", MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS],
       });
     });
   });
@@ -208,9 +249,10 @@ interface FakeCall {
 interface FakeRelayClient {
   calls: FakeCall[];
   failRead: boolean;
+  listFiles(options?: unknown): Promise<unknown>;
   readText(path: string, options?: unknown): Promise<unknown>;
   patchText(...args: unknown[]): Promise<unknown>;
-  openEditSession(path: string, ttlSeconds?: number): Promise<unknown>;
+  openEditSession(path: string, agentName: string, ttlSeconds?: number): Promise<unknown>;
   closeEditSession(sessionId: string): Promise<boolean>;
   getCursorContext(sessionId: string, options?: unknown): Promise<unknown>;
   listActiveCursors(sessionId: string): Promise<unknown>;
@@ -231,6 +273,23 @@ function createFakeRelayClient(): FakeRelayClient {
   return {
     calls,
     failRead: false,
+    async listFiles(options) {
+      calls.push({ method: "listFiles", args: options === undefined ? [] : [options] });
+      return {
+        ok: true,
+        entries: [
+          {
+            path: "Projects/Plan.md",
+            kind: "markdown",
+          },
+        ],
+        totalMatches: 1,
+        returnedCount: 1,
+        offset: typeof options === "object" && options !== null && "offset" in options
+          ? (options as { offset?: number }).offset ?? 0
+          : 0,
+      };
+    },
     async readText(path, options) {
       calls.push({ method: "readText", args: options === undefined ? [path] : [path, options] });
       if (this.failRead) {
@@ -253,8 +312,8 @@ function createFakeRelayClient(): FakeRelayClient {
         staleHandle: false,
       };
     },
-    async openEditSession(path, ttlSeconds) {
-      calls.push({ method: "openEditSession", args: [path, ttlSeconds] });
+    async openEditSession(path, agentName, ttlSeconds) {
+      calls.push({ method: "openEditSession", args: [path, agentName, ttlSeconds] });
       return { sessionId: "11111" };
     },
     async closeEditSession(sessionId) {

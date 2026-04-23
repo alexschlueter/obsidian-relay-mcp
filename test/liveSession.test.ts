@@ -83,10 +83,19 @@ describe("LiveEditSession markdown tools", () => {
       {
         clientId: session.ydoc.clientID,
         userId: "mcp-relay:00000",
-        userName: "mcp-relay agent 00000",
+        userName: "Test Agent",
         hasSelection: false,
       },
     ]);
+    expect(session.awareness.getLocalState()).toMatchObject({
+      user: {
+        id: "mcp-relay:00000",
+        name: "Test Agent",
+        color: expect.stringMatching(/^#[0-9a-f]{6}$/),
+        colorLight: expect.stringMatching(/^#[0-9a-f]{8}$/),
+        role: "agent",
+      },
+    });
   });
 });
 
@@ -127,6 +136,7 @@ function createSession(text: string): LiveEditSession {
     },
     ydoc,
     provider,
+    "Test Agent",
     () => encodeId(nextId++),
   );
 }

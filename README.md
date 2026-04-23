@@ -153,6 +153,7 @@ High-level methods currently available:
 - `loadFolder()`
 - `loadFolder(relayId, folderId)`
 - `resolvePath(folder, path)`
+- `listFiles(options?)`
 - `readText(path, optionsOrTtlSeconds?)`
 - `readText(relayId, folderId, path, optionsOrTtlSeconds?)`
 - `applyPatch(handle, patch, options?)`
@@ -165,7 +166,7 @@ High-level methods currently available:
 Live collaboration methods are separate from patch handles. `openEditSession(...)` creates a live websocket-backed Yjs session, publishes the agent cursor to Obsidian collaborator presence, and returns a 5-character `sessionId`. Live tools mutate the live `Y.Text` immediately. Match-consuming methods can omit `sessionId` when all match ids come from one known live session.
 
 ```ts
-const { sessionId } = await relay.openEditSession("Notes/Plan.md");
+const { sessionId } = await relay.openEditSession("Notes/Plan.md", "Codex");
 
 const matches = await relay.searchText(sessionId, "TODO");
 await relay.selectText(sessionId, matches.matches[0].matchId);
@@ -176,8 +177,8 @@ const cursors = await relay.listActiveCursors(sessionId);
 
 Live-session methods:
 
-- `openEditSession(path, ttlSeconds?)`
-- `openEditSession(relayId, folderId, path, ttlSeconds?)`
+- `openEditSession(path, agentName, ttlSeconds?)`
+- `openEditSession(relayId, folderId, path, agentName, ttlSeconds?)`
 - `closeEditSession(sessionId)`
 - `getCursorContext(sessionId, options?)`
 - `listActiveCursors(sessionId)`
@@ -219,9 +220,10 @@ The HTTP server defaults to `http://127.0.0.1:3333/mcp`. Optional env vars:
 
 MCP tools:
 
+- `list_files`: discover vault-relative Obsidian paths. Optional `query`, `pathPrefix`, `maxResults`, `offset`.
 - `read_text`: read markdown by `path`; returns `text`, window metadata, and `patchHandle`. Optional `ttlSeconds`, `startChar`, `maxChars`.
 - `apply_patch`: apply a Codex-style update patch by `patchHandle`. Optional `path` guard and `returnResult`.
-- `open_edit_session`: open a live edit session by `path`. Optional `ttlSeconds`, default 600.
+- `open_edit_session`: open a live edit session by `path` and required `agentName`. Optional `ttlSeconds`, default 600.
 - `close_edit_session`: close a live edit session.
 - `get_cursor_context`: inspect the agent cursor or an Obsidian collaborator cursor by `userId`, `userName`, or `clientId`.
 - `list_active_cursors`: list visible Obsidian collaborator cursors for a live session.

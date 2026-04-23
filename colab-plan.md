@@ -2,7 +2,7 @@
 
 - all ids should be 5 chars
 - wire up the live provider / awareness from relay server to get and send presence and cursor states
-- add openEditSession(path, ttlSeconds) method that returns a sessionId and creates a new edit session for the doc at path which saves cursor state. does not return text. cleans up automatically after ttl. if used after cleanup, expired error
+- add openEditSession(path, agentName, ttlSeconds) method that returns a sessionId and creates a new edit session for the doc at path which saves cursor state and publishes agentName in awareness. does not return text. cleans up automatically after ttl. if used after cleanup, expired error
 - port over the following methods from collaborative-ai-editor and wire them up with the relay server. each tool takes a sessionId as first mandatory argument, unless they can infer sessionId from matchIds, then sessionId is optional. work on Y doc directly instead of prosemirror:
 - before using a matchId, check if matches still matches at the stored position in current live Y doc, else return stale error
 

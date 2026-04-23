@@ -125,6 +125,7 @@ export class LiveEditSession {
   readonly matches = new Map<string, SearchMatchHandle>();
   cursorAnchor?: Y.RelativePosition;
   cursorHead?: Y.RelativePosition;
+  private readonly agentColor: AwarenessUserColor;
 
   constructor(
     readonly sessionId: string,
@@ -133,8 +134,10 @@ export class LiveEditSession {
     readonly clientToken: ClientToken,
     readonly ydoc: Y.Doc,
     readonly provider: LiveRelayProvider,
+    readonly agentName: string,
     private readonly issueId: () => string,
   ) {
+    this.agentColor = randomAwarenessUserColor();
     this.ytext = ydoc.getText("contents");
     this.setAgentAwareness();
     this.placeCursorAtDocumentBoundary("end");
@@ -415,9 +418,9 @@ export class LiveEditSession {
   private setAgentAwareness(): void {
     this.awareness.setLocalStateField("user", {
       id: `mcp-relay:${this.sessionId}`,
-      name: `mcp-relay agent ${this.sessionId}`,
-      color: "#3b82f6",
-      colorLight: "#bfdbfe",
+      name: this.agentName,
+      color: this.agentColor.color,
+      colorLight: this.agentColor.light,
       role: "agent",
     });
   }
@@ -666,6 +669,26 @@ function getAwarenessCursor(
     anchor: state.cursor.anchor,
     head: state.cursor.head,
   };
+}
+
+interface AwarenessUserColor {
+  color: string;
+  light: string;
+}
+
+const AWARENESS_USER_COLORS: AwarenessUserColor[] = [
+  { color: "#30bced", light: "#30bced33" },
+  { color: "#6eeb83", light: "#6eeb8333" },
+  { color: "#ffbc42", light: "#ffbc4233" },
+  { color: "#ecd444", light: "#ecd44433" },
+  { color: "#ee6352", light: "#ee635233" },
+  { color: "#9ac2c9", light: "#9ac2c933" },
+  { color: "#8acb88", light: "#8acb8833" },
+  { color: "#1be7ff", light: "#1be7ff33" },
+];
+
+function randomAwarenessUserColor(): AwarenessUserColor {
+  return AWARENESS_USER_COLORS[Math.floor(Math.random() * AWARENESS_USER_COLORS.length)]!;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

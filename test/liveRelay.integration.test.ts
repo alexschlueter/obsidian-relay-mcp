@@ -15,6 +15,7 @@ const notePath = process.env.RELAY_LIVE_TEST_NOTE_PATH ?? "";
 const timeoutMs = parseInteger(process.env.RELAY_LIVE_TEST_TIMEOUT_MS, 20_000);
 const editSessionTtlSeconds = Math.ceil(timeoutMs / 1000);
 const pollIntervalMs = parseInteger(process.env.RELAY_LIVE_TEST_POLL_MS, 500);
+const liveIntegrationAgentName = "mcp-relay live integration";
 
 const describeLive = liveTestEnabled ? describe : describe.skip;
 
@@ -45,14 +46,18 @@ describeLive("Relay live integration", () => {
     "opens a live edit session and publishes an agent cursor",
     async () => {
       const relay = RelayClient.fromEnv();
-      const { sessionId } = await relay.openEditSession(notePath, editSessionTtlSeconds);
+      const { sessionId } = await relay.openEditSession(
+        notePath,
+        liveIntegrationAgentName,
+        editSessionTtlSeconds,
+      );
 
       try {
         const cursors = await relay.listActiveCursors(sessionId);
         expect(cursors).toContainEqual({
           clientId: expect.any(Number),
           userId: `mcp-relay:${sessionId}`,
-          userName: `mcp-relay agent ${sessionId}`,
+          userName: liveIntegrationAgentName,
           hasSelection: false,
         });
 
@@ -132,6 +137,7 @@ describeLive("Relay live integration", () => {
       try {
         const { sessionId: openedSessionId } = await relay.openEditSession(
           notePath,
+          liveIntegrationAgentName,
           editSessionTtlSeconds * 3,
         );
         sessionId = openedSessionId;

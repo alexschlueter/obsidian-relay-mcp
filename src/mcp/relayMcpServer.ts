@@ -4,6 +4,7 @@ import * as z from "zod/v4";
 import {
   RelayApplyPatchOptions,
   RelayClient,
+  RelayListFilesOptions,
   RelayReadTextOptions,
   RELAY_HANDLE_LENGTH,
 } from "../relay-client/relayClient";
@@ -12,6 +13,7 @@ export const MCP_RELAY_DEFAULT_PATCH_TTL_SECONDS = 60;
 export const MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS = 600;
 
 export const RELAY_MCP_TOOL_NAMES = [
+  "list_files",
   "read_text",
   "apply_patch",
   "open_edit_session",
@@ -59,6 +61,35 @@ export function createRelayClientFromEnvForMcp(env: NodeJS.ProcessEnv = process.
 }
 
 export function registerRelayMcpTools(server: McpServer, client: RelayClient): void {
+  server.registerTool(
+    "list_files",
+    {
+      title: "List Obsidian Files",
+      description:
+        "List or search Obsidian files. Use to discover paths before reading or editing notes.",
+      inputSchema: {
+        query: z.string().optional().describe("Optional case-insensitive substring to match against full paths."),
+        pathPrefix: z.string().min(1).optional().describe("Optional folder path prefix to limit results."),
+        maxResults: z.number().int().positive().max(200).optional().describe("Maximum number of paths to return. Defaults to 50."),
+        offset: nonNegativeIntegerSchema.optional().describe("Pagination offset. Defaults to 0."),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ query, pathPrefix, maxResults, offset }) =>
+      runRelayTool(async () =>
+        client.listFiles(buildListFilesOptions({
+          query,
+          pathPrefix,
+          maxResults,
+          offset,
+        })),
+      ),
+  );
+
   server.registerTool(
     "read_text",
     {
@@ -123,6 +154,7 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
         "Open a live edit session for interactive work with a user in an Obsidian note.",
       inputSchema: {
         path: pathSchema,
+        agentName: z.string().trim().min(1).max(100).describe("Display name to publish for this agent in Obsidian collaborator presence."),
         ttlSeconds: ttlSecondsSchema.optional().describe("Live edit session TTL in seconds. Defaults to 600."),
       },
       annotations: {
@@ -131,9 +163,9 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
         openWorldHint: false,
       },
     },
-    async ({ path, ttlSeconds }) =>
+    async ({ path, agentName, ttlSeconds }) =>
       runRelayTool(async () =>
-        client.openEditSession(path, ttlSeconds ?? MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS),
+        client.openEditSession(path, agentName, ttlSeconds ?? MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS),
       ),
   );
 
@@ -166,7 +198,7 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
       description:
         "Returns context around this session's agent cursor, or around a matching Obsidian collaborator cursor. " +
         "If there is an active selection, also returns the selected text and exact range.\n" +
-        "For your own cursor, leave userId and clientId undefined. To discover collaborator identities, call list_active_cursors, then use either id.\n\n" +
+        "For your own cursor, leave userId and clientId undefined. To discover collaborator identities, call list_active_cursors first, then use either id.\n\n" +
         "Use this when the user refers to \"here\" or \"this\" or the current selection and you want to inspect it before editing.",
       inputSchema: {
         sessionId: handleSchema,
@@ -423,6 +455,15 @@ const handleSchema = z.string().length(RELAY_HANDLE_LENGTH).regex(/^[0-9A-Za-z]+
 const ttlSecondsSchema = z.number().positive();
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const cursorEdgeSchema = z.enum(["start", "end"]);
+
+function buildListFilesOptions(options: RelayListFilesOptions): RelayListFilesOptions {
+  return {
+    ...(options.query === undefined ? {} : { query: options.query }),
+    ...(options.pathPrefix === undefined ? {} : { pathPrefix: options.pathPrefix }),
+    ...(options.maxResults === undefined ? {} : { maxResults: options.maxResults }),
+    ...(options.offset === undefined ? {} : { offset: options.offset }),
+  };
+}
 
 function buildReadOptions(options: RelayReadTextOptions): RelayReadTextOptions | undefined {
   const definedOptions: RelayReadTextOptions = {
