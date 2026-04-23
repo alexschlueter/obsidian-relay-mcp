@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { loadRelayCoreFileConfig, RelayCore } from "../src";
+import { loadRelayClientFileConfig, RelayClient } from "../src";
 
-const storedConfig = loadRelayCoreFileConfig().config;
+const storedConfig = loadRelayClientFileConfig().config;
 const missingConfiguration = [
   ...(process.env.RELAY_BEARER_TOKEN ?? storedConfig?.bearerToken ? [] : ["RELAY_BEARER_TOKEN or saved config"]),
   ...(process.env.RELAY_ID ?? storedConfig?.relayId ? [] : ["RELAY_ID or saved config"]),
@@ -22,7 +22,7 @@ describeLive("Relay live integration", () => {
   it(
     "reads a configured note from the live Relay folder",
     async () => {
-      const relay = RelayCore.fromEnv();
+      const relay = RelayClient.fromEnv();
       const folder = await relay.loadFolder();
       const entry = relay.resolvePath(folder, notePath);
 
@@ -44,7 +44,7 @@ describeLive("Relay live integration", () => {
   it(
     "opens a live edit session and publishes an agent cursor",
     async () => {
-      const relay = RelayCore.fromEnv();
+      const relay = RelayClient.fromEnv();
       const { sessionId } = await relay.openEditSession(notePath, editSessionTtlSeconds);
 
       try {
@@ -74,7 +74,7 @@ describeLive("Relay live integration", () => {
   writeTest(
     "appends and removes a unique smoke-test marker through Relay",
     async () => {
-      const relay = RelayCore.fromEnv();
+      const relay = RelayClient.fromEnv();
       const markerId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const markerBlock = buildMarkerBlock(markerId);
 
@@ -124,7 +124,7 @@ describeLive("Relay live integration", () => {
   writeTest(
     "exercises live edit-session cursor, selection, search, and edit methods",
     async () => {
-      const relay = RelayCore.fromEnv();
+      const relay = RelayClient.fromEnv();
       const markerId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const marker = buildLiveSessionMarker(markerId);
       let sessionId: string | undefined;
@@ -320,7 +320,7 @@ if (!liveTestEnabled) {
 }
 
 function buildMarkerBlock(markerId: string): string {
-  return `\n\n<!-- relay-core live smoke test ${markerId} -->\nrelay-core live smoke test ${markerId}\n`;
+  return `\n\n<!-- relay-client live smoke test ${markerId} -->\nrelay-client live smoke test ${markerId}\n`;
 }
 
 function buildLiveSessionMarker(markerId: string): {
@@ -398,7 +398,7 @@ function appendMarker(current: string, markerBlock: string): string {
 }
 
 async function cleanupSmokeTestMarkers(
-  relay: RelayCore,
+  relay: RelayClient,
   path: string,
   timeoutMs: number,
   pollIntervalMs: number,
@@ -418,12 +418,12 @@ async function cleanupSmokeTestMarkers(
     await sleep(pollIntervalMs);
   }
 
-  throw new Error(`Timed out cleaning Relay live smoke test markers from ${path}`);
+  throw new Error(`Timed out cleaning RelayClient live smoke test markers from ${path}`);
 }
 
 function removeAllSmokeTestMarkerBlocks(text: string): string {
   const markerPattern =
-    /\n*<!-- relay-core live smoke test [^>\n]+ -->\nrelay-core live smoke test [^\n]*(?:\n|$)*/g;
+    /\n*<!-- relay-client live smoke test [^>\n]+ -->\nrelay-client live smoke test [^\n]*(?:\n|$)*/g;
   return text.replace(markerPattern, "");
 }
 
@@ -439,7 +439,7 @@ function buildReplacePatch(path: string, before: string, after: string): string 
 }
 
 async function waitForNoteState(
-  relay: RelayCore,
+  relay: RelayClient,
   path: string,
   predicate: (text: string) => boolean,
   timeoutMs: number,

@@ -1,4 +1,4 @@
 dist
 node_modules
 coverage
-.relay-core.json
+.relay-client.json

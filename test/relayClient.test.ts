@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import * as decoding from "lib0/decoding";
 import * as encoding from "lib0/encoding";
 import * as syncProtocol from "y-protocols/sync";
-import { RelayCore } from "../src/relay-core/relayCore";
+import { RelayClient } from "../src/relay-client/relayClient";
 
 const relayId = "11111111-1111-1111-1111-111111111111";
 const folderId = "22222222-2222-2222-2222-222222222222";
@@ -11,7 +11,7 @@ const folderDocId = "33333333-3333-3333-3333-333333333333";
 const noteDocId = "44444444-4444-4444-4444-444444444444";
 const notePath = "Notes/Test.md";
 
-describe("RelayCore handle editing", () => {
+describe("RelayClient handle editing", () => {
   it("returns a fresh handle for each read and applies update-file patches", async () => {
     const harness = createHarness("hello world\n");
     const relay = harness.createRelay();
@@ -133,7 +133,7 @@ describe("RelayCore handle editing", () => {
   });
 });
 
-describe("RelayCore live edit sessions", () => {
+describe("RelayClient live edit sessions", () => {
   it("hydrates the note document over websocket instead of fetching note content over HTTP", async () => {
     const harness = createHarness("live hello");
     harness.failNoteAsUpdate = true;
@@ -212,7 +212,7 @@ function createHarness(initialText: string) {
 
   return {
     createRelayWithOptions(options: { liveWebSocket?: boolean }) {
-      return new RelayCore({
+      return new RelayClient({
         apiUrl: "https://api.system3.md",
         bearerToken: "bearer-token",
         fetch: fetchImpl,

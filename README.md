@@ -1,6 +1,6 @@
 # mcp-relay
 
-`mcp-relay` now contains a headless `relay-core` TypeScript package for reading and updating Relay-backed Obsidian notes without running Obsidian itself.
+`mcp-relay` now contains a headless `relay-client` TypeScript package for reading and updating Relay-backed Obsidian notes without running Obsidian itself.
 
 The first pass is intentionally narrow: it focuses on existing markdown notes inside a Relay shared folder, and it writes changes back as native Yjs updates so Relay and Obsidian peers receive them through the normal sync path.
 
@@ -35,21 +35,21 @@ Relevant local references:
 
 - Relay plugin: `/home/alex/code/Relay`
 - Relay server API notes: [server-api.md](/home/alex/code/mcp-relay/server-api.md)
-- relay-core implementation plan: [relay-core-plan.md](/home/alex/code/mcp-relay/relay-core-plan.md)
+- relay-client implementation plan: [relay-client-plan.md](/home/alex/code/mcp-relay/relay-client-plan.md)
 - relay-server template: `/home/alex/code/relay-server-template`
 - relay-server source: `/home/alex/code/relay-server`
 - relay webhook client: `/home/alex/code/relay-git-sync`
 
 ## Project Layout
 
-- [src/relay-core/auth.ts](/home/alex/code/mcp-relay/src/relay-core/auth.ts): control-plane token exchange and short-lived token caching
-- [src/relay-core/folderIndex.ts](/home/alex/code/mcp-relay/src/relay-core/folderIndex.ts): `filemeta_v0` parsing, path normalization, and resource lookup
-- [src/relay-core/docClient.ts](/home/alex/code/mcp-relay/src/relay-core/docClient.ts): fetch and push Yjs updates over Relay HTTP endpoints
-- [src/relay-core/liveProvider.ts](/home/alex/code/mcp-relay/src/relay-core/liveProvider.ts): headless websocket sync and awareness provider
-- [src/relay-core/liveSession.ts](/home/alex/code/mcp-relay/src/relay-core/liveSession.ts): markdown-source live edit session tools
-- [src/relay-core/codexPatch.ts](/home/alex/code/mcp-relay/src/relay-core/codexPatch.ts): restricted Codex `*** Update File` patch parsing and application
-- [src/relay-core/textPatch.ts](/home/alex/code/mcp-relay/src/relay-core/textPatch.ts): diff and replace helpers for `Y.Text`
-- [src/relay-core/relayCore.ts](/home/alex/code/mcp-relay/src/relay-core/relayCore.ts): high-level API for loading folders, minting edit handles, and applying handle-based patches
+- [src/relay-client/auth.ts](/home/alex/code/mcp-relay/src/relay-client/auth.ts): control-plane token exchange and short-lived token caching
+- [src/relay-client/folderIndex.ts](/home/alex/code/mcp-relay/src/relay-client/folderIndex.ts): `filemeta_v0` parsing, path normalization, and resource lookup
+- [src/relay-client/docClient.ts](/home/alex/code/mcp-relay/src/relay-client/docClient.ts): fetch and push Yjs updates over Relay HTTP endpoints
+- [src/relay-client/liveProvider.ts](/home/alex/code/mcp-relay/src/relay-client/liveProvider.ts): headless websocket sync and awareness provider
+- [src/relay-client/liveSession.ts](/home/alex/code/mcp-relay/src/relay-client/liveSession.ts): markdown-source live edit session tools
+- [src/relay-client/codexPatch.ts](/home/alex/code/mcp-relay/src/relay-client/codexPatch.ts): restricted Codex `*** Update File` patch parsing and application
+- [src/relay-client/textPatch.ts](/home/alex/code/mcp-relay/src/relay-client/textPatch.ts): diff and replace helpers for `Y.Text`
+- [src/relay-client/relayClient.ts](/home/alex/code/mcp-relay/src/relay-client/relayClient.ts): high-level API for loading folders, minting edit handles, and applying handle-based patches
 - [src/mcp/relayMcpServer.ts](/home/alex/code/mcp-relay/src/mcp/relayMcpServer.ts): MCP tool registration with snake_case tool names and camelCase arguments
 - [src/mcp/stdioServer.ts](/home/alex/code/mcp-relay/src/mcp/stdioServer.ts): stdio MCP transport entrypoint
 - [src/mcp/httpServer.ts](/home/alex/code/mcp-relay/src/mcp/httpServer.ts): Streamable HTTP MCP endpoint
@@ -63,12 +63,13 @@ Recommended v1 environment variables:
 - `RELAY_BEARER_TOKEN`
 - `RELAY_ID`
 - `RELAY_FOLDER_ID`
+- `RELAY_CLIENT_CONFIG` optional path to the local JSON config file
 
 `RELAY_ID` and `RELAY_FOLDER_ID` are optional if you always pass them explicitly to the API methods, but they make the default `readText`, `writeText`, and `applyPatch` calls much cleaner.
 
-If `RELAY_API_URL` is not set, `relay-core` now defaults to `https://api.system3.md`.
+If `RELAY_API_URL` is not set, `relay-client` now defaults to `https://api.system3.md`.
 
-If `.relay-core.json` exists in the current working directory, `RelayCore.fromEnv()` will also load settings from that file and use them as fallbacks for:
+If `.relay-client.json` exists in the current working directory, `RelayClient.fromEnv()` will also load settings from that file and use them as fallbacks for:
 
 - `apiUrl`
 - `authUrl`
@@ -80,15 +81,15 @@ Environment variables still win over the config file.
 
 ## API
 
-The main entry point is `RelayCore`.
+The main entry point is `RelayClient`.
 
 ```ts
-import { RelayCore } from "mcp-relay";
+import { RelayClient } from "mcp-relay";
 
-const relay = RelayCore.fromEnv();
+const relay = RelayClient.fromEnv();
 
 const { text, patchHandle } = await relay.readText("Notes/Plan.md");
-const nextText = `${text}\n- synced from relay-core`;
+const nextText = `${text}\n- synced from relay-client`;
 
 const patch = [
   "*** Begin Patch",
@@ -115,7 +116,7 @@ function toPatchLines(value: string, prefix: "+" | "-"): string[] {
 You can also pass the Relay coordinates explicitly:
 
 ```ts
-const relay = RelayCore.fromEnv();
+const relay = RelayClient.fromEnv();
 
 const opened = await relay.readText(
   "11111111-1111-1111-1111-111111111111",
@@ -141,7 +142,7 @@ const windowed = await relay.readText("Notes/Plan.md", {
 });
 ```
 
-`applyPatch(...)` accepts a Codex-style patch with exactly one `*** Update File:` operation. The patch path is required inside the patch text. You may also pass the path as a separate argument, and `relay-core` will validate that both paths match the handle's stored document path.
+`applyPatch(...)` accepts a Codex-style patch with exactly one `*** Update File:` operation. The patch path is required inside the patch text. You may also pass the path as a separate argument, and `relay-client` will validate that both paths match the handle's stored document path.
 
 `applyPatch(...)` and `patchText(...)` accept `options.returnResult`, which defaults to `true`. Set it to `false` if you only need the `changed` / `staleHandle` flags and want to skip returning the local post-patch text.
 
@@ -193,7 +194,7 @@ Live-session methods:
 
 ## MCP Server
 
-The MCP server exposes the configured Obsidian note folder only. It loads auth and target settings through `RelayCore.fromEnv()`, then requires `RELAY_ID` and `RELAY_FOLDER_ID` to be present through env or `.relay-core.json`. Tool calls take vault-relative `path` values; agents do not choose sync targets.
+The MCP server exposes the configured Obsidian note folder only. It loads auth and target settings through `RelayClient.fromEnv()`, then requires `RELAY_ID` and `RELAY_FOLDER_ID` to be present through env or `.relay-client.json`. Tool calls take vault-relative `path` values; agents do not choose sync targets.
 
 Run over stdio for local MCP clients:
 
@@ -281,7 +282,7 @@ RELAY_LIVE_TEST_NOTE_PATH="Path/To/Safe-Test-Note.md" \
 pnpm test:live
 ```
 
-If you already saved credentials into `.relay-core.json`, you can omit `RELAY_API_URL` and `RELAY_BEARER_TOKEN`, and you can omit `RELAY_ID` / `RELAY_FOLDER_ID` too if those are also stored in the config.
+If you already saved credentials into `.relay-client.json`, you can omit `RELAY_API_URL` and `RELAY_BEARER_TOKEN`, and you can omit `RELAY_ID` / `RELAY_FOLDER_ID` too if those are also stored in the config.
 
 If you want the test to verify the write path too, enable the reversible round-trip step:
 
@@ -318,11 +319,11 @@ pnpm login:github
 ```
 
 The command prints a GitHub login URL, waits for the OAuth callback to reach Relay, then prints shell `export` lines for `RELAY_BEARER_TOKEN` and the resolved auth settings.
-It also saves the returned token and auth record into `.relay-core.json`, which `RelayCore.fromEnv()` will load automatically later.
+It also saves the returned token and auth record into `.relay-client.json`, which `RelayClient.fromEnv()` will load automatically later.
 
 ## Choose Relay Target
 
-Once you have a saved or env-provided bearer token, you can fetch the relays and shared folders available to that account, choose one interactively, and save the selected GUIDs into `.relay-core.json`:
+Once you have a saved or env-provided bearer token, you can fetch the relays and shared folders available to that account, choose one interactively, and save the selected GUIDs into `.relay-client.json`:
 
 ```bash
 cd /home/alex/code/mcp-relay
@@ -331,17 +332,17 @@ pnpm choose:target
 
 The chooser:
 
-- loads auth from env or `.relay-core.json`
+- loads auth from env or `.relay-client.json`
 - refreshes the saved bearer token if needed
 - lists available `relays`
 - lists shared folders for the selected relay
-- saves the selected `RELAY_ID` and `RELAY_FOLDER_ID` back into `.relay-core.json`
+- saves the selected `RELAY_ID` and `RELAY_FOLDER_ID` back into `.relay-client.json`
 
-This makes the later `RelayCore.fromEnv()` and `pnpm test:live` flows simpler because they can pick up the saved target automatically.
+This makes the later `RelayClient.fromEnv()` and `pnpm test:live` flows simpler because they can pick up the saved target automatically.
 
 ## Notes
 
-- `relay-core` uses the control-plane-compatible `/token` flow, not privileged direct relay-server auth.
+- `relay-client` uses the control-plane-compatible `/token` flow, not privileged direct relay-server auth.
 - Folder entries inside `filemeta_v0` are treated as metadata within the shared folder, not as standalone Relay document resources.
 - `readText(...)` stores the fetched Yjs document state behind a random in-memory handle; the handle itself does not embed auth.
 - `openEditSession(...)` stores a live local Yjs replica and awareness state behind a random in-memory session id; the session id itself does not embed auth.
@@ -350,4 +351,4 @@ This makes the later `RelayCore.fromEnv()` and `pnpm test:live` flows simpler be
 - Failed handle pushes do not persist the local handle mutation.
 - Live search match ids are also 5 characters. Anchors remain internal; tool responses return match ids, source positions, and context snippets.
 - Live match-consuming tools validate that the text at the anchored position still matches before editing. If not, they return a structured stale-match result instead of editing.
-- Relay bearer tokens do expire. The saved GitHub login config includes the auth record, and `relay-core` will attempt a PocketBase `authRefresh()` automatically when the bearer token is close to expiry.
+- Relay bearer tokens do expire. The saved GitHub login config includes the auth record, and `relay-client` will attempt a PocketBase `authRefresh()` automatically when the bearer token is close to expiry.

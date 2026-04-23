@@ -4,17 +4,17 @@ import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import {
   DEFAULT_RELAY_API_URL,
-  loadRelayCoreFileConfig,
-  saveRelayCoreFileConfig,
-} from "../relay-core/config";
+  loadRelayClientFileConfig,
+  saveRelayClientFileConfig,
+} from "../relay-client/config";
 import {
   RelayDirectoryClient,
   type RelayFolderSummary,
   type RelaySummary,
-} from "../relay-core/directory";
+} from "../relay-client/directory";
 
 async function main(): Promise<void> {
-  const loaded = loadRelayCoreFileConfig();
+  const loaded = loadRelayClientFileConfig();
   const config = loaded.config;
   const apiUrl = process.env.RELAY_API_URL ?? config?.apiUrl ?? DEFAULT_RELAY_API_URL;
   const authUrl = process.env.RELAY_AUTH_URL ?? config?.authUrl;
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     );
 
     const authState = client.getAuthState();
-    const saved = saveRelayCoreFileConfig(
+    const saved = saveRelayClientFileConfig(
       {
         apiUrl,
         authUrl: authState.authUrl,

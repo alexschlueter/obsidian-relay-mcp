@@ -1,8 +1,8 @@
-# relay-core plan
+# relay-client plan
 
 ## Goal
 
-Build a small headless `relay-core` inside `mcp-relay` that can talk to Relay directly, without Obsidian, so an MCP server can:
+Build a small headless `relay-client` inside `mcp-relay` that can talk to Relay directly, without Obsidian, so an MCP server can:
 
 - resolve a vault path inside a Relay shared folder
 - read the current markdown contents from Relay
@@ -75,7 +75,7 @@ Observed direct routes:
 - `GET /d/{docId}/ws/{docId2}`
 - file endpoints under `/f/...`
 
-### Why this matters for `relay-core`
+### Why this matters for `relay-client`
 
 The plugin asks for access using logical Relay coordinates:
 
@@ -101,7 +101,7 @@ Fresh-session implementation rule:
 
 Do not try to extract half of the Obsidian plugin into a library.
 
-For `relay-core`, the cheaper and safer move is:
+For `relay-client`, the cheaper and safer move is:
 
 - copy or lightly adapt the stable protocol/data-model pieces
 - reimplement a very small headless path index around `filemeta_v0`
@@ -122,7 +122,7 @@ The recommended v1 stance is:
 
 ## Target shape
 
-`relay-core` should be a small TypeScript package inside `mcp-relay`, because:
+`relay-client` should be a small TypeScript package inside `mcp-relay`, because:
 
 - the existing Relay plugin code is TypeScript
 - the MCP server will likely also be TypeScript/Node
@@ -130,12 +130,12 @@ The recommended v1 stance is:
 
 Suggested modules:
 
-- `src/relay-core/s3rn.ts`
-- `src/relay-core/auth.ts`
-- `src/relay-core/folderIndex.ts`
-- `src/relay-core/docClient.ts`
-- `src/relay-core/textPatch.ts`
-- `src/relay-core/relayCore.ts`
+- `src/relay-client/s3rn.ts`
+- `src/relay-client/auth.ts`
+- `src/relay-client/folderIndex.ts`
+- `src/relay-client/docClient.ts`
+- `src/relay-client/textPatch.ts`
+- `src/relay-client/relayClient.ts`
 
 ## Minimal responsibilities
 
@@ -173,7 +173,7 @@ Important notes:
 - the Obsidian plugin talks to a Relay API surface that knows `relay` + `folder` + `docId`
 - the bare `relay-server` repo exposes direct doc auth by `docId`
 - `/doc/{docId}/auth` on relay-server expects a privileged bearer token, not a normal plugin user session
-- `relay-core` v1 should assume control-plane mode unless there is a concrete need to run without it
+- `relay-client` v1 should assume control-plane mode unless there is a concrete need to run without it
 
 ### 2. `s3rn.ts`
 
@@ -251,7 +251,7 @@ Recommendation:
 
 This matters because Yjs will merge concurrent updates, but blind full-document replacement can produce ugly interleavings.
 
-### 6. `relayCore.ts`
+### 6. `relayClient.ts`
 
 Purpose:
 
@@ -404,7 +404,7 @@ Success condition:
 
 ### Phase 3: MCP wrapper
 
-- add a thin MCP server around `relay-core`
+- add a thin MCP server around `relay-client`
 - expose a tiny tool surface
 
 Suggested first tools:

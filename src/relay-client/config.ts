@@ -2,9 +2,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 export const DEFAULT_RELAY_API_URL = "https://api.system3.md";
-export const DEFAULT_RELAY_CORE_CONFIG_FILENAME = ".relay-core.json";
+export const DEFAULT_RELAY_CLIENT_CONFIG_FILENAME = ".relay-client.json";
 
-export interface RelayCoreFileConfig {
+export interface RelayClientFileConfig {
   apiUrl?: string;
   authUrl?: string;
   bearerToken?: string;
@@ -16,32 +16,33 @@ export interface RelayCoreFileConfig {
   updatedAt?: string;
 }
 
-export interface RelayCoreFileConfigResult {
-  config?: RelayCoreFileConfig;
+export interface RelayClientFileConfigResult {
+  config?: RelayClientFileConfig;
   path: string;
 }
 
-export interface RelayCoreConfigPathOptions {
+export interface RelayClientConfigPathOptions {
   configPath?: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
 }
 
-export function resolveRelayCoreConfigPath(options: RelayCoreConfigPathOptions = {}): string {
+export function resolveRelayClientConfigPath(options: RelayClientConfigPathOptions = {}): string {
   const cwd = options.cwd ?? process.cwd();
-  const configuredPath = options.configPath ?? options.env?.RELAY_CORE_CONFIG;
+  const env = options.env ?? process.env;
+  const configuredPath = options.configPath ?? env.RELAY_CLIENT_CONFIG;
   if (!configuredPath) {
-    return path.resolve(cwd, DEFAULT_RELAY_CORE_CONFIG_FILENAME);
+    return path.resolve(cwd, DEFAULT_RELAY_CLIENT_CONFIG_FILENAME);
   }
   return path.isAbsolute(configuredPath)
     ? configuredPath
     : path.resolve(cwd, configuredPath);
 }
 
-export function loadRelayCoreFileConfig(
-  options: RelayCoreConfigPathOptions = {},
-): RelayCoreFileConfigResult {
-  const resolvedPath = resolveRelayCoreConfigPath(options);
+export function loadRelayClientFileConfig(
+  options: RelayClientConfigPathOptions = {},
+): RelayClientFileConfigResult {
+  const resolvedPath = resolveRelayClientConfigPath(options);
   if (!fs.existsSync(resolvedPath)) {
     return { path: resolvedPath };
   }
@@ -58,16 +59,16 @@ export function loadRelayCoreFileConfig(
 
   return {
     path: resolvedPath,
-    config: parsed as RelayCoreFileConfig,
+    config: parsed as RelayClientFileConfig,
   };
 }
 
-export function saveRelayCoreFileConfig(
-  patch: RelayCoreFileConfig,
-  options: RelayCoreConfigPathOptions = {},
-): RelayCoreFileConfigResult {
-  const loaded = loadRelayCoreFileConfig(options);
-  const merged: RelayCoreFileConfig = {
+export function saveRelayClientFileConfig(
+  patch: RelayClientFileConfig,
+  options: RelayClientConfigPathOptions = {},
+): RelayClientFileConfigResult {
+  const loaded = loadRelayClientFileConfig(options);
+  const merged: RelayClientFileConfig = {
     ...(loaded.config ?? {}),
     ...removeUndefinedValues(patch),
     updatedAt: new Date().toISOString(),

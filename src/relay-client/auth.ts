@@ -1,5 +1,5 @@
 import { S3RN, S3RNType, S3RemoteCanvas, S3RemoteDocument, S3RemoteFile } from "./s3rn";
-import { saveRelayCoreFileConfig } from "./config";
+import { saveRelayClientFileConfig } from "./config";
 import { getBearerTokenExpiryTime, RelayLoginClient } from "./login";
 
 export interface ClientToken {
@@ -158,7 +158,7 @@ export class RelayAuthClient {
       this.authRecord = refreshed.record as Record<string, unknown>;
 
       if (this.configPath) {
-        saveRelayCoreFileConfig(
+        saveRelayClientFileConfig(
           {
             authRecord: this.authRecord,
             authUrl: this.authUrl,

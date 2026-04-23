@@ -1,5 +1,5 @@
 import PocketBase, { type RecordFullListOptions, type RecordModel } from "pocketbase";
-import { saveRelayCoreFileConfig } from "./config";
+import { saveRelayClientFileConfig } from "./config";
 import { getBearerTokenExpiryTime, RelayLoginClient, resolveRelayAuthUrl } from "./login";
 
 interface RelayRecord extends RecordModel {
@@ -231,7 +231,7 @@ export class RelayDirectoryClient {
       this.pb.authStore.save(this.bearerToken, this.authRecord as RecordModel | undefined);
 
       if (this.configPath) {
-        saveRelayCoreFileConfig(
+        saveRelayClientFileConfig(
           {
             authRecord: this.authRecord,
             authUrl: this.authUrl,

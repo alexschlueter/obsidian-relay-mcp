@@ -1,7 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
-import { RelayCore } from "../src/relay-core/relayCore";
+import { RelayClient } from "../src/relay-client/relayClient";
 import {
   createRelayMcpServer,
   MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS,
@@ -10,7 +10,7 @@ import {
 
 describe("Relay MCP server", () => {
   it("registers the agreed tool surface without write_text", async () => {
-    await withMcpClient(createFakeRelayCore(), async ({ client }) => {
+    await withMcpClient(createFakeRelayClient(), async ({ client }) => {
       const tools = await client.listTools();
       const toolNames = tools.tools.map((tool) => tool.name).sort();
 
@@ -20,7 +20,7 @@ describe("Relay MCP server", () => {
   });
 
   it("presents Obsidian-facing metadata to agents", async () => {
-    await withMcpClient(createFakeRelayCore(), async ({ client }) => {
+    await withMcpClient(createFakeRelayClient(), async ({ client }) => {
       const tools = await client.listTools();
       const serverVersion = client.getServerVersion();
       const agentFacingStrings = [
@@ -35,7 +35,7 @@ describe("Relay MCP server", () => {
   });
 
   it("keeps tool names snake_case but exposes camelCase arguments", async () => {
-    await withMcpClient(createFakeRelayCore(), async ({ client }) => {
+    await withMcpClient(createFakeRelayClient(), async ({ client }) => {
       const tools = await client.listTools();
       const toolNames = tools.tools.map((tool) => tool.name);
       const argumentNames = tools.tools.flatMap((tool) =>
@@ -50,10 +50,10 @@ describe("Relay MCP server", () => {
     });
   });
 
-  it("maps read_text camelCase args to RelayCore readText options", async () => {
-    const fakeCore = createFakeRelayCore();
+  it("maps read_text camelCase args to RelayClient readText options", async () => {
+    const fakeClient = createFakeRelayClient();
 
-    await withMcpClient(fakeCore, async ({ client }) => {
+    await withMcpClient(fakeClient, async ({ client }) => {
       const result = await client.callTool({
         name: "read_text",
         arguments: {
@@ -69,7 +69,7 @@ describe("Relay MCP server", () => {
         handle: "00000",
         text: "hello",
       });
-      expect(fakeCore.calls).toContainEqual({
+      expect(fakeClient.calls).toContainEqual({
         method: "readText",
         args: [
           "Notes/Test.md",
@@ -83,10 +83,10 @@ describe("Relay MCP server", () => {
     });
   });
 
-  it("maps apply_patch camelCase args to RelayCore patchText", async () => {
-    const fakeCore = createFakeRelayCore();
+  it("maps apply_patch camelCase args to RelayClient patchText", async () => {
+    const fakeClient = createFakeRelayClient();
 
-    await withMcpClient(fakeCore, async ({ client }) => {
+    await withMcpClient(fakeClient, async ({ client }) => {
       const result = await client.callTool({
         name: "apply_patch",
         arguments: {
@@ -101,7 +101,7 @@ describe("Relay MCP server", () => {
         changed: true,
         staleHandle: false,
       });
-      expect(fakeCore.calls).toContainEqual({
+      expect(fakeClient.calls).toContainEqual({
         method: "patchText",
         args: [
           "abcde",
@@ -114,9 +114,9 @@ describe("Relay MCP server", () => {
   });
 
   it("uses a 10 minute default TTL for open_edit_session", async () => {
-    const fakeCore = createFakeRelayCore();
+    const fakeClient = createFakeRelayClient();
 
-    await withMcpClient(fakeCore, async ({ client }) => {
+    await withMcpClient(fakeClient, async ({ client }) => {
       const result = await client.callTool({
         name: "open_edit_session",
         arguments: {
@@ -125,7 +125,7 @@ describe("Relay MCP server", () => {
       });
 
       expect(result.structuredContent).toEqual({ sessionId: "11111" });
-      expect(fakeCore.calls).toContainEqual({
+      expect(fakeClient.calls).toContainEqual({
         method: "openEditSession",
         args: ["Notes/Test.md", MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS],
       });
@@ -133,7 +133,7 @@ describe("Relay MCP server", () => {
   });
 
   it("wraps list_active_cursors arrays in structured content", async () => {
-    await withMcpClient(createFakeRelayCore(), async ({ client }) => {
+    await withMcpClient(createFakeRelayClient(), async ({ client }) => {
       const result = await client.callTool({
         name: "list_active_cursors",
         arguments: {
@@ -155,11 +155,11 @@ describe("Relay MCP server", () => {
     });
   });
 
-  it("returns structured tool errors for thrown RelayCore errors", async () => {
-    const fakeCore = createFakeRelayCore();
-    fakeCore.failRead = true;
+  it("returns structured tool errors for thrown RelayClient errors", async () => {
+    const fakeClient = createFakeRelayClient();
+    fakeClient.failRead = true;
 
-    await withMcpClient(fakeCore, async ({ client }) => {
+    await withMcpClient(fakeClient, async ({ client }) => {
       const result = await client.callTool({
         name: "read_text",
         arguments: {
@@ -178,11 +178,11 @@ describe("Relay MCP server", () => {
 });
 
 async function withMcpClient(
-  fakeCore: FakeRelayCore,
-  fn: (context: { client: Client; fakeCore: FakeRelayCore }) => Promise<void>,
+  fakeClient: FakeRelayClient,
+  fn: (context: { client: Client; fakeClient: FakeRelayClient }) => Promise<void>,
 ): Promise<void> {
   const server = createRelayMcpServer({
-    core: fakeCore as unknown as RelayCore,
+    client: fakeClient as unknown as RelayClient,
   });
   const client = new Client({
     name: "mcp-relay-test-client",
@@ -193,7 +193,7 @@ async function withMcpClient(
   try {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
-    await fn({ client, fakeCore });
+    await fn({ client, fakeClient });
   } finally {
     await client.close();
     await server.close();
@@ -205,7 +205,7 @@ interface FakeCall {
   args: unknown[];
 }
 
-interface FakeRelayCore {
+interface FakeRelayClient {
   calls: FakeCall[];
   failRead: boolean;
   readText(path: string, options?: unknown): Promise<unknown>;
@@ -226,7 +226,7 @@ interface FakeRelayCore {
   deleteSelection(sessionId: string): Promise<unknown>;
 }
 
-function createFakeRelayCore(): FakeRelayCore {
+function createFakeRelayClient(): FakeRelayClient {
   const calls: FakeCall[] = [];
   return {
     calls,

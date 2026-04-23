@@ -1,7 +1,7 @@
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
-import { RelayCore } from "../relay-core/relayCore";
-import { createRelayCoreFromEnvForMcp, createRelayMcpServer } from "./relayMcpServer";
+import { RelayClient } from "../relay-client/relayClient";
+import { createRelayClientFromEnvForMcp, createRelayMcpServer } from "./relayMcpServer";
 
 type TransportRequest = Parameters<StreamableHTTPServerTransport["handleRequest"]>[0];
 type TransportResponse = Parameters<StreamableHTTPServerTransport["handleRequest"]>[1];
@@ -18,7 +18,7 @@ interface ExpressResponseLike {
 }
 
 export interface RelayMcpHttpServerOptions {
-  core?: RelayCore;
+  client?: RelayClient;
   env?: NodeJS.ProcessEnv;
   host?: string;
   port?: number;
@@ -37,7 +37,7 @@ export interface RelayMcpHttpServerHandle {
 export async function startRelayMcpHttpServer(
   options: RelayMcpHttpServerOptions = {},
 ): Promise<RelayMcpHttpServerHandle> {
-  const core = options.core ?? createRelayCoreFromEnvForMcp(options.env);
+  const client = options.client ?? createRelayClientFromEnvForMcp(options.env);
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 3333;
   const endpoint = normalizeEndpoint(options.endpoint ?? "/mcp");
@@ -47,7 +47,7 @@ export async function startRelayMcpHttpServer(
   });
 
   app.post(endpoint, async (req: ExpressRequestLike, res: ExpressResponseLike) => {
-    const server = createRelayMcpServer({ core });
+    const server = createRelayMcpServer({ client });
     const transport = new StreamableHTTPServerTransport({
       enableJsonResponse: true,
       sessionIdGenerator: undefined,

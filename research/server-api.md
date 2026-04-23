@@ -1,6 +1,6 @@
 # Relay server API overview
 
-This file captures the architecture split that matters for `relay-core`.
+This file captures the architecture split that matters for `relay-client`.
 
 ## TL;DR
 
@@ -11,7 +11,7 @@ There are two different APIs in a normal Relay setup:
 
 The Obsidian plugin talks to both, but it relies on the control plane for login, permissions, host registration, and resource-to-token translation.
 
-For `relay-core`, the recommended v1 path is:
+For `relay-client`, the recommended v1 path is:
 
 - use the control-plane-compatible `/token` flow
 - treat the bare relay-server as the low-level Yjs transport behind that
@@ -109,7 +109,7 @@ At the Yjs transport boundary, there is evidence of a compound document id conve
 
 Implementation rule:
 
-- inside `relay-core`, keep resource ids separate
+- inside `relay-client`, keep resource ids separate
 - only build compound ids at the transport boundary when needed
 
 ## 5. What the plugin expects
@@ -131,7 +131,7 @@ That means the plugin-facing `/token` API is doing more than the bare relay-serv
 - logical-resource to concrete-doc translation
 - token minting
 
-## 6. What `relay-core` should implement
+## 6. What `relay-client` should implement
 
 ### Recommended v1: control-plane mode
 
@@ -199,4 +199,4 @@ A fresh agent should assume:
 - use `filemeta_v0` as the source of path mapping
 - use Yjs update fetch/apply/send for actual document edits
 
-The companion file `relay-core-plan.md` is the implementation plan. This file is the architectural boundary map that explains which API each step should talk to.
+The companion file `relay-client-plan.md` is the implementation plan. This file is the architectural boundary map that explains which API each step should talk to.

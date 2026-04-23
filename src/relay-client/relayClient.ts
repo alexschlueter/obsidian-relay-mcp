@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { ClientToken, RelayAuthClient, RelayAuthClientOptions } from "./auth";
 import { applyCodexUpdatePatch } from "./codexPatch";
-import { DEFAULT_RELAY_API_URL, loadRelayCoreFileConfig } from "./config";
+import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig } from "./config";
 import { LoadedTextDocument, RelayDocClient } from "./docClient";
 import { FolderEntry, FolderIndex, normalizeRelayPath, toS3Resource } from "./folderIndex";
 import { LiveRelayProvider, LiveRelayProviderOptions } from "./liveProvider";
@@ -18,7 +18,7 @@ import {
 import { S3RemoteFolder } from "./s3rn";
 import { patchText as applyTextPatch, replaceText, TextMutationResult } from "./textPatch";
 
-export interface RelayCoreConfig extends RelayAuthClientOptions {
+export interface RelayClientConfig extends RelayAuthClientOptions {
   relayId?: string;
   folderId?: string;
   liveProvider?: LiveRelayProviderOptions;
@@ -75,7 +75,7 @@ export interface RelayWriteResult {
   changed: boolean;
 }
 
-export class RelayCore {
+export class RelayClient {
   readonly auth: RelayAuthClient;
   readonly docClient: RelayDocClient;
   readonly defaultRelayId?: string;
@@ -85,7 +85,7 @@ export class RelayCore {
   private readonly editSessions = new Map<string, StoredEditSession>();
   private nextIdNumber = 0;
 
-  constructor(config: RelayCoreConfig) {
+  constructor(config: RelayClientConfig) {
     this.auth = new RelayAuthClient(config);
     this.docClient = new RelayDocClient({ fetch: config.fetch });
     this.defaultRelayId = config.relayId;
@@ -93,8 +93,8 @@ export class RelayCore {
     this.liveProviderOptions = config.liveProvider ?? {};
   }
 
-  static fromEnv(env: NodeJS.ProcessEnv = process.env, overrides: Partial<RelayCoreConfig> = {}): RelayCore {
-    const loaded = loadRelayCoreFileConfig({
+  static fromEnv(env: NodeJS.ProcessEnv = process.env, overrides: Partial<RelayClientConfig> = {}): RelayClient {
+    const loaded = loadRelayClientFileConfig({
       configPath: overrides.configPath,
       env,
     });
@@ -109,7 +109,7 @@ export class RelayCore {
       );
     }
 
-    return new RelayCore({
+    return new RelayClient({
       ...overrides,
       apiUrl,
       authRecord: overrides.authRecord ?? fileConfig?.authRecord,
@@ -671,7 +671,7 @@ export class RelayCore {
 
     if (!resolvedRelayId || !resolvedFolderId) {
       throw new Error(
-        "RelayCore needs relayId and folderId either in the method call or as RELAY_ID / RELAY_FOLDER_ID defaults",
+        "RelayClient needs relayId and folderId either in the method call or as RELAY_ID / RELAY_FOLDER_ID defaults",
       );
     }
 

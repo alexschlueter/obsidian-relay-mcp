@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { S3RN, S3RemoteDocument, S3RemoteFile, S3RemoteFolder } from "../src/relay-core/s3rn";
+import { S3RN, S3RemoteDocument, S3RemoteFile, S3RemoteFolder } from "../src/relay-client/s3rn";
 
 const relayId = "11111111-1111-1111-1111-111111111111";
 const folderId = "22222222-2222-2222-2222-222222222222";

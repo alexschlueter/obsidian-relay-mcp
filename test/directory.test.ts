@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RelayDirectoryClient } from "../src/relay-core/directory";
+import { RelayDirectoryClient } from "../src/relay-client/directory";
 
 describe("RelayDirectoryClient", () => {
   it("lists relays and shared folders using Relay guids", async () => {

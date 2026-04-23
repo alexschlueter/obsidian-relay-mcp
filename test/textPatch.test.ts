@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { patchText, replaceText } from "../src/relay-core/textPatch";
+import { patchText, replaceText } from "../src/relay-client/textPatch";
 
 describe("textPatch", () => {
   it("applies a diff-style patch to Y.Text", () => {

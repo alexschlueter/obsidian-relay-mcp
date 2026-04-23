@@ -2,7 +2,7 @@
   "name": "mcp-relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Headless relay-core library for reading and updating Relay-backed Obsidian notes over Yjs.",
+  "description": "Headless relay-client library for reading and updating Relay-backed Obsidian notes over Yjs.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

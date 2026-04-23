@@ -2,9 +2,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_RELAY_API_URL, loadRelayCoreFileConfig, saveRelayCoreFileConfig } from "../src/relay-core/config";
-import { RelayCore } from "../src/relay-core/relayCore";
-import { S3RemoteFolder } from "../src/relay-core/s3rn";
+import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig, saveRelayClientFileConfig } from "../src/relay-client/config";
+import { RelayClient } from "../src/relay-client/relayClient";
+import { S3RemoteFolder } from "../src/relay-client/s3rn";
 
 const tempDirs: string[] = [];
 
@@ -17,17 +17,17 @@ afterEach(() => {
   }
 });
 
-describe("relay-core config", () => {
+describe("relay-client config", () => {
   it("saves and loads the local config file", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-relay-config-"));
     tempDirs.push(tempDir);
 
     const env = {
       ...process.env,
-      RELAY_CORE_CONFIG: path.join(tempDir, "relay-config.json"),
+      RELAY_CLIENT_CONFIG: path.join(tempDir, "relay-config.json"),
     };
 
-    saveRelayCoreFileConfig(
+    saveRelayClientFileConfig(
       {
         bearerToken: "token-123",
         relayId: "relay-guid",
@@ -35,7 +35,7 @@ describe("relay-core config", () => {
       { env },
     );
 
-    const loaded = loadRelayCoreFileConfig({ env });
+    const loaded = loadRelayClientFileConfig({ env });
 
     expect(loaded.config).toMatchObject({
       bearerToken: "token-123",
@@ -49,10 +49,10 @@ describe("relay-core config", () => {
 
     const env = {
       ...process.env,
-      RELAY_CORE_CONFIG: path.join(tempDir, "relay-config.json"),
+      RELAY_CLIENT_CONFIG: path.join(tempDir, "relay-config.json"),
     };
 
-    saveRelayCoreFileConfig(
+    saveRelayClientFileConfig(
       {
         bearerToken: "saved-token",
         relayId: "11111111-1111-1111-1111-111111111111",
@@ -62,7 +62,7 @@ describe("relay-core config", () => {
     );
 
     const requests: Array<{ headers?: HeadersInit; url: string }> = [];
-    const relay = RelayCore.fromEnv(env, {
+    const relay = RelayClient.fromEnv(env, {
       fetch: async (input, init) => {
         requests.push({
           url: String(input),

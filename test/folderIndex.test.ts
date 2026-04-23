@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
-import { FolderIndex, normalizeRelayPath } from "../src/relay-core/folderIndex";
+import { FolderIndex, normalizeRelayPath } from "../src/relay-client/folderIndex";
 
 const relayId = "11111111-1111-1111-1111-111111111111";
 const folderId = "22222222-2222-2222-2222-222222222222";

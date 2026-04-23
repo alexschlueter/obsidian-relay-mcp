@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { DEFAULT_RELAY_API_URL, loadRelayCoreFileConfig, saveRelayCoreFileConfig } from "../relay-core/config";
-import { buildRelayBearerTokenExports, RelayLoginClient } from "../relay-core/login";
+import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig, saveRelayClientFileConfig } from "../relay-client/config";
+import { buildRelayBearerTokenExports, RelayLoginClient } from "../relay-client/login";
 
 async function main(): Promise<void> {
-  const loadedConfig = loadRelayCoreFileConfig();
+  const loadedConfig = loadRelayClientFileConfig();
   const apiUrl = process.env.RELAY_API_URL ?? loadedConfig.config?.apiUrl ?? DEFAULT_RELAY_API_URL;
   const authUrl = process.env.RELAY_AUTH_URL ?? loadedConfig.config?.authUrl;
   const timeoutMs = parsePositiveInt(process.env.RELAY_LOGIN_TIMEOUT_MS, 120_000);
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
 
   console.log("");
   console.log(`[relay-login] Logged in as ${formatUser(result)}`);
-  const saved = saveRelayCoreFileConfig({
+  const saved = saveRelayClientFileConfig({
     apiUrl,
     authRecord: result.record as Record<string, unknown>,
     authUrl: result.authUrl,
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
     }),
   );
   console.log("");
-  console.log("[relay-login] relay-core will load the saved config automatically on the next run.");
+  console.log("[relay-login] relay-client will load the saved config automatically on the next run.");
   console.log("");
 }
 

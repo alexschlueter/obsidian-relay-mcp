@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { Awareness } from "y-protocols/awareness";
-import { LiveEditSession } from "../src/relay-core/liveSession";
-import { LiveRelayProvider } from "../src/relay-core/liveProvider";
+import { LiveEditSession } from "../src/relay-client/liveSession";
+import { LiveRelayProvider } from "../src/relay-client/liveProvider";
 
 describe("LiveEditSession markdown tools", () => {
   it("searches with short match ids and keeps anchors internal", () => {

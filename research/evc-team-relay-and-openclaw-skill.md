@@ -77,7 +77,7 @@ Current `mcp-relay` is lower-level and more CRDT-aware:
 - `applyPatch()` edits the handle-local replica and pushes a Yjs delta
 - it exposes `staleHandle` to tell the caller when remote peers changed the doc since the read
 
-See `src/relay-core/relayCore.ts:104-205`.
+See `src/relay-client/relayClient.ts:104-205`.
 
 By contrast, the published Team Relay / OpenClaw integration chooses not to expose Yjs directly. It exposes file operations and keeps the CRDT machinery behind the boundary.
 

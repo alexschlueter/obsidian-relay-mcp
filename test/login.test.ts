@@ -3,7 +3,7 @@ import {
   buildRelayBearerTokenExports,
   getBearerTokenExpiryTime,
   resolveRelayAuthUrl,
-} from "../src/relay-core/login";
+} from "../src/relay-client/login";
 
 describe("relay login helpers", () => {
   it("prefers an explicit auth url", () => {

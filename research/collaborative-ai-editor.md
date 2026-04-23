@@ -78,12 +78,12 @@ Our current `mcp-relay` is similar in one important way: it also keeps per-sessi
 - TTL
 - one lock per handle
 
-See `src/relay-core/relayCore.ts:104-127`.
+See `src/relay-client/relayClient.ts:104-127`.
 
 The big difference is what the handle means:
 
 - In `collaborative-ai-editor`, the handle-like objects are semantic anchors inside a live collaborative session.
-- In `mcp-relay`, the handle is a frozen local replica plus stored text, and `applyPatch()` applies a Codex `*** Update File` patch against that stored text exactly. See `src/relay-core/relayCore.ts:145-205` and `src/relay-core/codexPatch.ts:22-167`.
+- In `mcp-relay`, the handle is a frozen local replica plus stored text, and `applyPatch()` applies a Codex `*** Update File` patch against that stored text exactly. See `src/relay-client/relayClient.ts:145-205` and `src/relay-client/codexPatch.ts:22-167`.
 
 So today:
 

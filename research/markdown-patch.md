@@ -54,7 +54,7 @@ Current `mcp-relay` is generic and patch-text oriented:
 - `codexPatch.ts` parses hunks and applies them by matching exact line sequences in the stored text.
 - The resulting full text is then pushed back into Yjs via our handle flow.
 
-See `src/relay-core/codexPatch.ts:22-167` and `src/relay-core/relayCore.ts:145-205`.
+See `src/relay-client/codexPatch.ts:22-167` and `src/relay-client/relayClient.ts:145-205`.
 
 That means:
 

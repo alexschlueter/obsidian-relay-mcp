@@ -3,10 +3,10 @@ import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import * as z from "zod/v4";
 import {
   RelayApplyPatchOptions,
-  RelayCore,
+  RelayClient,
   RelayReadTextOptions,
   RELAY_HANDLE_LENGTH,
-} from "../relay-core/relayCore";
+} from "../relay-client/relayClient";
 
 export const MCP_RELAY_DEFAULT_PATCH_TTL_SECONDS = 60;
 export const MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS = 600;
@@ -31,34 +31,34 @@ export const RELAY_MCP_TOOL_NAMES = [
 ] as const;
 
 export interface RelayMcpServerOptions {
-  core?: RelayCore;
+  client?: RelayClient;
   env?: NodeJS.ProcessEnv;
   name?: string;
   version?: string;
 }
 
 export function createRelayMcpServer(options: RelayMcpServerOptions = {}): McpServer {
-  const core = options.core ?? createRelayCoreFromEnvForMcp(options.env);
+  const client = options.client ?? createRelayClientFromEnvForMcp(options.env);
   const server = new McpServer({
     name: options.name ?? "obsidian-notes",
     version: options.version ?? "0.1.0",
   });
 
-  registerRelayMcpTools(server, core);
+  registerRelayMcpTools(server, client);
   return server;
 }
 
-export function createRelayCoreFromEnvForMcp(env: NodeJS.ProcessEnv = process.env): RelayCore {
-  const core = RelayCore.fromEnv(env);
-  if (!core.defaultRelayId || !core.defaultFolderId) {
+export function createRelayClientFromEnvForMcp(env: NodeJS.ProcessEnv = process.env): RelayClient {
+  const client = RelayClient.fromEnv(env);
+  if (!client.defaultRelayId || !client.defaultFolderId) {
     throw new Error(
       "The Obsidian MCP server needs a configured sync target. Set RELAY_ID and RELAY_FOLDER_ID or run pnpm choose:target.",
     );
   }
-  return core;
+  return client;
 }
 
-export function registerRelayMcpTools(server: McpServer, core: RelayCore): void {
+export function registerRelayMcpTools(server: McpServer, client: RelayClient): void {
   server.registerTool(
     "read_text",
     {
@@ -79,7 +79,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ path, startChar, maxChars, ttlSeconds }) =>
       runRelayTool(async () =>
-        core.readText(path, buildReadOptions({
+        client.readText(path, buildReadOptions({
           ttlSeconds,
           startChar,
           maxChars,
@@ -109,9 +109,9 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       runRelayTool(async () => {
         const patchOptions = buildPatchOptions(returnResult);
         if (path) {
-          return core.patchText(patchHandle, path, patch, patchOptions);
+          return client.patchText(patchHandle, path, patch, patchOptions);
         }
-        return core.patchText(patchHandle, patch, patchOptions);
+        return client.patchText(patchHandle, patch, patchOptions);
       }),
   );
 
@@ -133,7 +133,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ path, ttlSeconds }) =>
       runRelayTool(async () =>
-        core.openEditSession(path, ttlSeconds ?? MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS),
+        client.openEditSession(path, ttlSeconds ?? MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS),
       ),
   );
 
@@ -155,7 +155,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     async ({ sessionId }) =>
       runRelayTool(async () => ({
         ok: true,
-        closed: await core.closeEditSession(sessionId),
+        closed: await client.closeEditSession(sessionId),
       })),
   );
 
@@ -183,7 +183,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ sessionId, maxCharsBefore, maxCharsAfter, userId, clientId }) =>
       runRelayTool(async () =>
-        core.getCursorContext(sessionId, {
+        client.getCursorContext(sessionId, {
           ...(maxCharsBefore === undefined ? {} : { maxCharsBefore }),
           ...(maxCharsAfter === undefined ? {} : { maxCharsAfter }),
           ...(userId === undefined ? {} : { userId }),
@@ -209,7 +209,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     async ({ sessionId }) =>
       runRelayTool(async () => ({
         ok: true,
-        cursors: await core.listActiveCursors(sessionId),
+        cursors: await client.listActiveCursors(sessionId),
       })),
   );
 
@@ -231,7 +231,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       },
     },
     async ({ sessionId, query, maxResults }) =>
-      runRelayTool(async () => core.searchText(sessionId, query, maxResults)),
+      runRelayTool(async () => client.searchText(sessionId, query, maxResults)),
   );
 
   server.registerTool(
@@ -239,7 +239,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     {
       title: "Replace Matches",
       description:
-        'Replace multiple previously found exact matches in one step. Use this after search_text when the user wants the same exact text changed in several places, such as renaming a character throughout the document.',
+        'Replace multiple previously found exact matches with the same replacement text. Use this after search_text when the user wants the same exact text changed in several places, such as renaming a character throughout the document.',
       inputSchema: {
         matchIds: z.array(handleSchema).describe("Match ids returned by search_text."),
         text: z.string().describe("Text to replace all matches with."),
@@ -252,7 +252,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ matchIds, text }) =>
       runRelayTool(async () => {
-        return core.replaceMatches(matchIds, text);
+        return client.replaceMatches(matchIds, text);
       }),
   );
 
@@ -274,7 +274,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ matchId, edge }) =>
       runRelayTool(async () => {
-        return core.placeCursor(matchId, edge);
+        return client.placeCursor(matchId, edge);
       }),
   );
 
@@ -295,7 +295,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       },
     },
     async ({ sessionId, boundary }) =>
-      runRelayTool(async () => core.placeCursorAtDocumentBoundary(sessionId, boundary)),
+      runRelayTool(async () => client.placeCursorAtDocumentBoundary(sessionId, boundary)),
   );
 
   server.registerTool(
@@ -314,7 +314,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ matchId }) =>
       runRelayTool(async () => {
-        return core.selectText(matchId);
+        return client.selectText(matchId);
       }),
   );
 
@@ -334,7 +334,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       },
     },
     async ({ sessionId }) =>
-      runRelayTool(async () => core.selectCurrentBlock(sessionId)),
+      runRelayTool(async () => client.selectCurrentBlock(sessionId)),
   );
 
   server.registerTool(
@@ -357,7 +357,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
     },
     async ({ startMatchId, endMatchId, startEdge, endEdge }) =>
       runRelayTool(async () => {
-        return core.selectBetweenMatches(startMatchId, endMatchId, startEdge, endEdge);
+        return client.selectBetweenMatches(startMatchId, endMatchId, startEdge, endEdge);
       }),
   );
 
@@ -376,7 +376,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       },
     },
     async ({ sessionId }) =>
-      runRelayTool(async () => core.clearSelection(sessionId)),
+      runRelayTool(async () => client.clearSelection(sessionId)),
   );
 
   server.registerTool(
@@ -396,7 +396,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       },
     },
     async ({ sessionId, text }) =>
-      runRelayTool(async () => core.insertText(sessionId, text)),
+      runRelayTool(async () => client.insertText(sessionId, text)),
   );
 
   server.registerTool(
@@ -414,7 +414,7 @@ export function registerRelayMcpTools(server: McpServer, core: RelayCore): void 
       },
     },
     async ({ sessionId }) =>
-      runRelayTool(async () => core.deleteSelection(sessionId)),
+      runRelayTool(async () => client.deleteSelection(sessionId)),
   );
 }
 
