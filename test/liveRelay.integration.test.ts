@@ -13,6 +13,7 @@ const liveTestEnabled = missingConfiguration.length === 0;
 const writeRoundTripEnabled = isTruthy(process.env.RELAY_LIVE_TEST_WRITE);
 const notePath = process.env.RELAY_LIVE_TEST_NOTE_PATH ?? "";
 const timeoutMs = parseInteger(process.env.RELAY_LIVE_TEST_TIMEOUT_MS, 20_000);
+const editSessionTtlSeconds = Math.ceil(timeoutMs / 1000);
 const pollIntervalMs = parseInteger(process.env.RELAY_LIVE_TEST_POLL_MS, 500);
 
 const describeLive = liveTestEnabled ? describe : describe.skip;
@@ -28,10 +29,9 @@ describeLive("Relay live integration", () => {
       expect(entry, `Expected ${notePath} to exist in the configured Relay folder`).toBeDefined();
       expect(entry?.resourceKind).toBe("document");
 
-      const text = await relay.readText(notePath);
+      const { text } = await relay.readText(notePath);
 
       expect(typeof text).toBe("string");
-      expect(text.length).toBeGreaterThan(0);
 
       console.log(`[live-relay] resolved ${notePath} -> ${entry?.id}`);
       console.log(`[live-relay] current note length: ${text.length} characters`);
@@ -41,6 +41,36 @@ describeLive("Relay live integration", () => {
 
   const writeTest = writeRoundTripEnabled ? it : it.skip;
 
+  it(
+    "opens a live edit session and publishes an agent cursor",
+    async () => {
+      const relay = RelayCore.fromEnv();
+      const { sessionId } = await relay.openEditSession(notePath, editSessionTtlSeconds);
+
+      try {
+        const cursors = await relay.listActiveCursors(sessionId);
+        expect(cursors).toContainEqual({
+          clientId: expect.any(Number),
+          userId: `mcp-relay:${sessionId}`,
+          userName: `mcp-relay agent ${sessionId}`,
+          hasSelection: false,
+        });
+
+        const context = await relay.getCursorContext(sessionId, {
+          maxCharsBefore: 40,
+          maxCharsAfter: 40,
+        });
+        expect(context.ok).toBe(true);
+        expect(context).toMatchObject({
+          hasSelection: false,
+        });
+      } finally {
+        relay.closeEditSession(sessionId);
+      }
+    },
+    timeoutMs,
+  );
+
   writeTest(
     "appends and removes a unique smoke-test marker through Relay",
     async () => {
@@ -48,40 +78,40 @@ describeLive("Relay live integration", () => {
       const markerId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const markerBlock = buildMarkerBlock(markerId);
 
-      const originalText = await relay.readText(notePath);
+      const originalText = await cleanupSmokeTestMarkers(
+        relay,
+        notePath,
+        timeoutMs,
+        pollIntervalMs,
+      );
       expect(originalText).not.toContain(markerBlock);
 
-      await relay.patchText(notePath, (current) => {
-        if (current.includes(markerBlock)) {
-          return current;
-        }
-
-        return appendMarker(current, markerBlock);
-      });
+      const original = await relay.readText(notePath);
+      await relay.applyPatch(
+        original.handle,
+        buildReplacePatch(notePath, originalText, appendMarker(originalText, markerBlock)),
+      );
 
       try {
         const withMarker = await waitForNoteState(
           relay,
           notePath,
-          (text) => text.includes(markerBlock),
+          (text) => text.includes(markerId),
           timeoutMs,
           pollIntervalMs,
         );
 
-        expect(withMarker).toContain(markerBlock);
+        expect(withMarker).toContain(markerId);
         console.log(`[live-relay] marker appended to ${notePath}`);
       } finally {
-        await relay.patchText(notePath, (current) => current.replace(markerBlock, ""));
-
-        const cleanedText = await waitForNoteState(
+        const cleanedText = await cleanupSmokeTestMarkers(
           relay,
           notePath,
-          (text) => !text.includes(markerBlock),
           timeoutMs,
           pollIntervalMs,
         );
 
-        expect(cleanedText).not.toContain(markerBlock);
+        expect(cleanedText).not.toContain(markerId);
         expect(cleanedText).toBe(
           originalText,
         );
@@ -89,6 +119,190 @@ describeLive("Relay live integration", () => {
       }
     },
     timeoutMs * 2,
+  );
+
+  writeTest(
+    "exercises live edit-session cursor, selection, search, and edit methods",
+    async () => {
+      const relay = RelayCore.fromEnv();
+      const markerId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const marker = buildLiveSessionMarker(markerId);
+      let sessionId: string | undefined;
+
+      try {
+        const { sessionId: openedSessionId } = await relay.openEditSession(
+          notePath,
+          editSessionTtlSeconds * 3,
+        );
+        sessionId = openedSessionId;
+
+        const atEnd = await relay.placeCursorAtDocumentBoundary(sessionId, "end");
+        expect(atEnd).toMatchObject({ ok: true });
+
+        const insertResult = await relay.insertText(sessionId, marker.insertedBlock);
+        expect(insertResult).toEqual({
+          ok: true,
+          insertedChars: marker.insertedBlock.length,
+        });
+
+        await waitForNoteState(
+          relay,
+          notePath,
+          (text) => text.includes(marker.openingComment),
+          timeoutMs,
+          pollIntervalMs,
+        );
+
+        const openMatches = await relay.searchText(sessionId, marker.openingComment);
+        expect(openMatches.matches).toHaveLength(1);
+
+        const headingMatches = await relay.searchText(sessionId, marker.headingText);
+        expect(headingMatches.matches).toHaveLength(1);
+
+        const headingCursor = await relay.placeCursor(
+          sessionId,
+          headingMatches.matches[0]!.matchId,
+          "start",
+        );
+        expect(headingCursor).toMatchObject({ ok: true });
+
+        const headingBlock = await relay.selectCurrentBlock(sessionId);
+        expect(headingBlock).toMatchObject({
+          ok: true,
+          blockType: "heading",
+          selectedText: marker.headingLine,
+        });
+
+        const headingSelectionContext = await relay.getCursorContext(sessionId);
+        expect(headingSelectionContext).toMatchObject({
+          ok: true,
+          hasSelection: true,
+          selectedText: marker.headingLine,
+        });
+
+        const clearResult = await relay.clearSelection(sessionId);
+        expect(clearResult).toMatchObject({ ok: true });
+
+        const afterClearContext = await relay.getCursorContext(sessionId);
+        expect(afterClearContext).toMatchObject({
+          ok: true,
+          hasSelection: false,
+        });
+
+        const tokenAMatches = await relay.searchText(sessionId, marker.tokenA);
+        const tokenBMatches = await relay.searchText(sessionId, marker.tokenB);
+        const tokenCMatches = await relay.searchText(sessionId, marker.tokenC);
+        expect(tokenAMatches.matches).toHaveLength(1);
+        expect(tokenBMatches.matches).toHaveLength(1);
+        expect(tokenCMatches.matches).toHaveLength(1);
+
+        const listCursor = await relay.placeCursor(
+          sessionId,
+          tokenAMatches.matches[0]!.matchId,
+          "start",
+        );
+        expect(listCursor).toMatchObject({ ok: true });
+
+        const listBlock = await relay.selectCurrentBlock(sessionId);
+        expect(listBlock).toMatchObject({
+          ok: true,
+          blockType: "list",
+        });
+        expect(listBlock.ok && listBlock.selectedText).toContain(marker.tokenA);
+        expect(listBlock.ok && listBlock.selectedText).toContain(marker.tokenB);
+
+        const selectedToken = await relay.selectText(sessionId, tokenCMatches.matches[0]!.matchId);
+        expect(selectedToken).toEqual({
+          ok: true,
+          selectedText: marker.tokenC,
+          selectedFrom: expect.any(Number),
+          selectedTo: expect.any(Number),
+        });
+
+        const selectedContext = await relay.getCursorContext(sessionId);
+        expect(selectedContext).toMatchObject({
+          ok: true,
+          hasSelection: true,
+          selectedText: marker.tokenC,
+        });
+
+        const replacement = `${marker.tokenB}-replaced`;
+        const replaceResult = await relay.replaceMatches(
+          sessionId,
+          [tokenBMatches.matches[0]!.matchId],
+          replacement,
+        );
+        expect(replaceResult).toEqual({
+          ok: true,
+          replacedCount: 1,
+          insertedChars: replacement.length,
+        });
+
+        const closeMatches = await relay.searchText(sessionId, marker.closingComment);
+        expect(closeMatches.matches).toHaveLength(1);
+
+        const between = await relay.selectBetweenMatches(
+          sessionId,
+          openMatches.matches[0]!.matchId,
+          closeMatches.matches[0]!.matchId,
+        );
+        expect(between).toMatchObject({
+          ok: true,
+          selectedText: expect.stringContaining(replacement),
+        });
+
+        const deleteTarget = await relay.searchText(sessionId, marker.tokenA);
+        expect(deleteTarget.matches).toHaveLength(1);
+        const selectedA = await relay.selectText(sessionId, deleteTarget.matches[0]!.matchId);
+        expect(selectedA).toMatchObject({
+          ok: true,
+          selectedText: marker.tokenA,
+        });
+
+        const deleteResult = await relay.deleteSelection(sessionId);
+        expect(deleteResult).toEqual({
+          ok: true,
+          numCharsDeleted: marker.tokenA.length,
+        });
+
+        const latest = await waitForNoteState(
+          relay,
+          notePath,
+          (text) =>
+            text.includes(replacement) &&
+            !text.includes(marker.tokenA) &&
+            text.includes(marker.closingComment),
+          timeoutMs,
+          pollIntervalMs,
+        );
+
+        expect(latest).toContain(replacement);
+        expect(latest).not.toContain(marker.tokenA);
+        console.log(`[live-relay] live edit-session methods exercised on ${notePath}`);
+      } finally {
+        if (sessionId) {
+          relay.closeEditSession(sessionId);
+        }
+
+        const cleanupRead = await relay.readText(notePath);
+        const cleanedText = removeLiveSessionMarkerBlock(cleanupRead.text, markerId);
+        if (cleanedText !== cleanupRead.text) {
+          await relay.applyPatch(
+            cleanupRead.handle,
+            buildReplacePatch(notePath, cleanupRead.text, cleanedText),
+          );
+          await waitForNoteState(
+            relay,
+            notePath,
+            (text) => !text.includes(markerId),
+            timeoutMs,
+            pollIntervalMs,
+          );
+          console.log(`[live-relay] live edit-session marker removed`);
+        }
+      }
+    },
+    timeoutMs * 3,
   );
 });
 
@@ -109,11 +323,119 @@ function buildMarkerBlock(markerId: string): string {
   return `\n\n<!-- relay-core live smoke test ${markerId} -->\nrelay-core live smoke test ${markerId}\n`;
 }
 
+function buildLiveSessionMarker(markerId: string): {
+  insertedBlock: string;
+  openingComment: string;
+  closingComment: string;
+  headingLine: string;
+  headingText: string;
+  tokenA: string;
+  tokenB: string;
+  tokenC: string;
+} {
+  const openingComment = `<!-- mcp-relay live session test ${markerId} -->`;
+  const closingComment = `<!-- /mcp-relay live session test ${markerId} -->`;
+  const headingText = `mcp-relay live heading ${markerId}`;
+  const headingLine = `# ${headingText}`;
+  const tokenA = `mcp-relay-token-a-${markerId}`;
+  const tokenB = `mcp-relay-token-b-${markerId}`;
+  const tokenC = `mcp-relay-token-c-${markerId}`;
+  const insertedBlock = [
+    "",
+    "",
+    openingComment,
+    headingLine,
+    `- ${tokenA}`,
+    `- ${tokenB}`,
+    tokenC,
+    closingComment,
+    "",
+  ].join("\n");
+
+  return {
+    insertedBlock,
+    openingComment,
+    closingComment,
+    headingLine,
+    headingText,
+    tokenA,
+    tokenB,
+    tokenC,
+  };
+}
+
+function removeLiveSessionMarkerBlock(text: string, markerId: string): string {
+  const openingComment = `<!-- mcp-relay live session test ${markerId} -->`;
+  const closingComment = `<!-- /mcp-relay live session test ${markerId} -->`;
+  const start = text.indexOf(openingComment);
+  if (start < 0) {
+    return text;
+  }
+
+  const closeStart = text.indexOf(closingComment, start);
+  if (closeStart < 0) {
+    return text;
+  }
+
+  let removeStart = start;
+  while (removeStart > 0 && text[removeStart - 1] === "\n") {
+    removeStart -= 1;
+  }
+
+  let removeEnd = closeStart + closingComment.length;
+  while (removeEnd < text.length && text[removeEnd] === "\n") {
+    removeEnd += 1;
+  }
+
+  return `${text.slice(0, removeStart)}${text.slice(removeEnd)}`;
+}
+
 function appendMarker(current: string, markerBlock: string): string {
   if (current.endsWith("\n")) {
     return `${current}${markerBlock.slice(1)}`;
   }
   return `${current}${markerBlock}`;
+}
+
+async function cleanupSmokeTestMarkers(
+  relay: RelayCore,
+  path: string,
+  timeoutMs: number,
+  pollIntervalMs: number,
+): Promise<string> {
+  const startedAt = Date.now();
+  let latestText = "";
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const read = await relay.readText(path);
+    latestText = read.text;
+    const cleaned = removeAllSmokeTestMarkerBlocks(latestText);
+    if (cleaned === latestText) {
+      return latestText;
+    }
+
+    await relay.writeText(path, cleaned);
+    await sleep(pollIntervalMs);
+  }
+
+  throw new Error(`Timed out cleaning Relay live smoke test markers from ${path}`);
+}
+
+function removeAllSmokeTestMarkerBlocks(text: string): string {
+  const markerPattern =
+    /\n*<!-- relay-core live smoke test [^>\n]+ -->\nrelay-core live smoke test [^\n]*(?:\n|$)*/g;
+  return text.replace(markerPattern, "");
+}
+
+function buildReplacePatch(path: string, before: string, after: string): string {
+  return [
+    "*** Begin Patch",
+    `*** Update File: ${path}`,
+    "@@",
+    ...splitPatchLines(before).map((line) => `-${line}`),
+    ...splitPatchLines(after).map((line) => `+${line}`),
+    "*** End Patch",
+  ].join("\n");
 }
 
 async function waitForNoteState(
@@ -126,7 +448,7 @@ async function waitForNoteState(
   const startedAt = Date.now();
 
   while (Date.now() - startedAt <= timeoutMs) {
-    const text = await relay.readText(path);
+    const { text } = await relay.readText(path);
     if (predicate(text)) {
       return text;
     }
@@ -147,4 +469,17 @@ function parseInteger(rawValue: string | undefined, fallback: number): number {
 
 function isTruthy(rawValue: string | undefined): boolean {
   return rawValue === "1" || rawValue === "true" || rawValue === "yes";
+}
+
+function splitPatchLines(text: string): string[] {
+  if (text.length === 0) {
+    return [];
+  }
+
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
+  if (normalized.endsWith("\n")) {
+    lines.pop();
+  }
+  return lines;
 }

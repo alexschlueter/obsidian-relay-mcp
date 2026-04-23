@@ -20,9 +20,13 @@
     "test:live": "vitest run test/liveRelay.integration.test.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "diff-match-patch": "^1.0.5",
+    "lib0": "^0.2.117",
     "pocketbase": "^0.20.3",
-    "yjs": "^13.6.27"
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.27",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/diff-match-patch": "^1.0.36",

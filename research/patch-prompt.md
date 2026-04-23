@@ -1,0 +1,13 @@
+- I don't think readText should return path, relayId, folderId, they are possible inputs, not outputs
+- keep readText name instead of openText because open implies that it needs to be closed later. don't add openText, no createHandle arg
+- in memory storage only
+- yes ttl arg default 1min
+- concurrency: every readText call returns different handle and persists separate Y state, so concurrent patches with different handles are no problem. use one lock per handle
+- no refreshHandle forkHandle or handleRevision. refreshHandle is obsolete because can just call readText again to get new state + new handle and work with that
+- only update file patches for now
+- path arg to patchText: optional. path field in patch: required. if both given, validate same
+- refresh semantics: if remote peers edit, handle still represents local replica, but patchText returns a staleHandle: true field. later, MCP will include a warning text for the agent in this case
+- Failure mode on push: return error, do not persist changes
+- Patch application basis: match against handles stored text exactly
+- handle does not embed auth
+- applyPatch has optional arg returnResult, default true, decides wether to return result text after patch

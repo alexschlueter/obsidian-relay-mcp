@@ -11,19 +11,21 @@ Implemented in this repo:
 - control-plane token exchange through `POST /token`
 - shared-folder loading through the folder Yjs document
 - `filemeta_v0` parsing and path resolution
-- reading existing markdown notes by path
-- writing and patching existing markdown notes by path
-- diff-based Yjs text mutations for less destructive updates
+- reading existing markdown notes by path while creating in-memory edit handles
+- applying Codex-style `*** Update File` patches against stored Yjs handle state
+- opening live edit sessions over the Relay websocket provider
+- reading and publishing awareness cursor/selection state
+- markdown-source cursor, selection, search, and edit helpers for live sessions
+- MCP server wrappers for stdio and Streamable HTTP
+- writing existing markdown notes by path
+- diff-based Yjs text mutations for less destructive updates under the hood
 - focused tests for S3RN handling, folder parsing, and text patching
 
 Explicitly not implemented yet:
 
 - create, rename, or delete flows
 - binary upload and download tooling
-- background websocket subscriptions
-- login flows or session refresh logic
 - direct relay-server admin mode
-- MCP server wrappers
 
 ## Background
 
@@ -43,8 +45,14 @@ Relevant local references:
 - [src/relay-core/auth.ts](/home/alex/code/mcp-relay/src/relay-core/auth.ts): control-plane token exchange and short-lived token caching
 - [src/relay-core/folderIndex.ts](/home/alex/code/mcp-relay/src/relay-core/folderIndex.ts): `filemeta_v0` parsing, path normalization, and resource lookup
 - [src/relay-core/docClient.ts](/home/alex/code/mcp-relay/src/relay-core/docClient.ts): fetch and push Yjs updates over Relay HTTP endpoints
-- [src/relay-core/textPatch.ts](/home/alex/code/mcp-relay/src/relay-core/textPatch.ts): patch and replace helpers for `Y.Text`
-- [src/relay-core/relayCore.ts](/home/alex/code/mcp-relay/src/relay-core/relayCore.ts): high-level API for loading folders and editing notes by path
+- [src/relay-core/liveProvider.ts](/home/alex/code/mcp-relay/src/relay-core/liveProvider.ts): headless websocket sync and awareness provider
+- [src/relay-core/liveSession.ts](/home/alex/code/mcp-relay/src/relay-core/liveSession.ts): markdown-source live edit session tools
+- [src/relay-core/codexPatch.ts](/home/alex/code/mcp-relay/src/relay-core/codexPatch.ts): restricted Codex `*** Update File` patch parsing and application
+- [src/relay-core/textPatch.ts](/home/alex/code/mcp-relay/src/relay-core/textPatch.ts): diff and replace helpers for `Y.Text`
+- [src/relay-core/relayCore.ts](/home/alex/code/mcp-relay/src/relay-core/relayCore.ts): high-level API for loading folders, minting edit handles, and applying handle-based patches
+- [src/mcp/relayMcpServer.ts](/home/alex/code/mcp-relay/src/mcp/relayMcpServer.ts): MCP tool registration with snake_case tool names and camelCase arguments
+- [src/mcp/stdioServer.ts](/home/alex/code/mcp-relay/src/mcp/stdioServer.ts): stdio MCP transport entrypoint
+- [src/mcp/httpServer.ts](/home/alex/code/mcp-relay/src/mcp/httpServer.ts): Streamable HTTP MCP endpoint
 
 ## Configuration
 
@@ -56,7 +64,7 @@ Recommended v1 environment variables:
 - `RELAY_ID`
 - `RELAY_FOLDER_ID`
 
-`RELAY_ID` and `RELAY_FOLDER_ID` are optional if you always pass them explicitly to the API methods, but they make the default `readText`, `writeText`, and `patchText` calls much cleaner.
+`RELAY_ID` and `RELAY_FOLDER_ID` are optional if you always pass them explicitly to the API methods, but they make the default `readText`, `writeText`, and `applyPatch` calls much cleaner.
 
 If `RELAY_API_URL` is not set, `relay-core` now defaults to `https://api.system3.md`.
 
@@ -79,13 +87,29 @@ import { RelayCore } from "mcp-relay";
 
 const relay = RelayCore.fromEnv();
 
-const markdown = await relay.readText("Notes/Plan.md");
+const { text, patchHandle } = await relay.readText("Notes/Plan.md");
+const nextText = `${text}\n- synced from relay-core`;
 
-await relay.patchText("Notes/Plan.md", (current) => {
-  return `${current}\n- synced from relay-core`;
-});
+const patch = [
+  "*** Begin Patch",
+  "*** Update File: Notes/Plan.md",
+  "@@",
+  ...toPatchLines(text, "-"),
+  ...toPatchLines(nextText, "+"),
+  "*** End Patch",
+].join("\n");
+
+const result = await relay.applyPatch(patchHandle, patch);
 
 await relay.writeText("Notes/Scratch.md", "# Replaced\n\nThis note was rewritten.");
+
+function toPatchLines(value: string, prefix: "+" | "-"): string[] {
+  const lines = value.replace(/\r\n/g, "\n").split("\n");
+  if (value.endsWith("\n")) {
+    lines.pop();
+  }
+  return lines.map((line) => `${prefix}${line}`);
+}
 ```
 
 You can also pass the Relay coordinates explicitly:
@@ -93,24 +117,125 @@ You can also pass the Relay coordinates explicitly:
 ```ts
 const relay = RelayCore.fromEnv();
 
-const markdown = await relay.readText(
+const opened = await relay.readText(
   "11111111-1111-1111-1111-111111111111",
   "22222222-2222-2222-2222-222222222222",
   "Notes/Plan.md",
 );
 ```
 
+`readText(...)` now returns:
+
+- `text`: the current markdown string
+- `patchHandle`: a fresh in-memory edit handle tied to the full Yjs state that was read
+- `handle`: deprecated compatibility alias for `patchHandle`
+- `totalChars`, `startChar`, `endChar`, and `truncated`: window metadata for partial reads
+
+Handles are process-local and in-memory only. Every `readText(...)` call returns a new 5-character `patchHandle`, even for the same note. The default handle TTL is 60 seconds. You can override it or request a text window with an options object:
+
+```ts
+const windowed = await relay.readText("Notes/Plan.md", {
+  startChar: 1000,
+  maxChars: 2000,
+  ttlSeconds: 120,
+});
+```
+
+`applyPatch(...)` accepts a Codex-style patch with exactly one `*** Update File:` operation. The patch path is required inside the patch text. You may also pass the path as a separate argument, and `relay-core` will validate that both paths match the handle's stored document path.
+
+`applyPatch(...)` and `patchText(...)` accept `options.returnResult`, which defaults to `true`. Set it to `false` if you only need the `changed` / `staleHandle` flags and want to skip returning the local post-patch text.
+
+If remote peers changed the note after the handle was created, `applyPatch(...)` still applies your patch against the handle's local Yjs state and returns `staleHandle: true`. In that case, the returned `resultText` is the handle's local post-patch text, not necessarily a fully refreshed merged server snapshot.
+
 High-level methods currently available:
 
 - `loadFolder()`
 - `loadFolder(relayId, folderId)`
 - `resolvePath(folder, path)`
-- `readText(path)`
-- `readText(relayId, folderId, path)`
+- `readText(path, optionsOrTtlSeconds?)`
+- `readText(relayId, folderId, path, optionsOrTtlSeconds?)`
+- `applyPatch(handle, patch, options?)`
+- `applyPatch(handle, path, patch, options?)`
+- `patchText(handle, patch, options?)`
+- `patchText(handle, path, patch, options?)`
 - `writeText(path, nextText)`
 - `writeText(relayId, folderId, path, nextText)`
-- `patchText(path, transform)`
-- `patchText(relayId, folderId, path, transform)`
+
+Live collaboration methods are separate from patch handles. `openEditSession(...)` creates a live websocket-backed Yjs session, publishes the agent cursor to Obsidian collaborator presence, and returns a 5-character `sessionId`. Live tools mutate the live `Y.Text` immediately. Match-consuming methods can omit `sessionId` when all match ids come from one known live session.
+
+```ts
+const { sessionId } = await relay.openEditSession("Notes/Plan.md");
+
+const matches = await relay.searchText(sessionId, "TODO");
+await relay.selectText(sessionId, matches.matches[0].matchId);
+await relay.insertText(sessionId, "DONE");
+
+const cursors = await relay.listActiveCursors(sessionId);
+```
+
+Live-session methods:
+
+- `openEditSession(path, ttlSeconds?)`
+- `openEditSession(relayId, folderId, path, ttlSeconds?)`
+- `closeEditSession(sessionId)`
+- `getCursorContext(sessionId, options?)`
+- `listActiveCursors(sessionId)`
+- `searchText(sessionId, query, maxResults?)`
+- `replaceMatches(sessionId, matchIds, text)`
+- `placeCursor(sessionId, matchId, edge?)`
+- `placeCursorAtDocumentBoundary(sessionId, boundary)`
+- `selectText(sessionId, matchId)`
+- `selectCurrentBlock(sessionId)`
+- `selectBetweenMatches(sessionId, startMatchId, endMatchId, startEdge?, endEdge?)`
+- `clearSelection(sessionId)`
+- `insertText(sessionId, text)`
+- `deleteSelection(sessionId)`
+
+## MCP Server
+
+The MCP server exposes the configured Obsidian note folder only. It loads auth and target settings through `RelayCore.fromEnv()`, then requires `RELAY_ID` and `RELAY_FOLDER_ID` to be present through env or `.relay-core.json`. Tool calls take vault-relative `path` values; agents do not choose sync targets.
+
+Run over stdio for local MCP clients:
+
+```bash
+cd /home/alex/code/mcp-relay
+pnpm mcp:stdio
+```
+
+Run over Streamable HTTP:
+
+```bash
+cd /home/alex/code/mcp-relay
+pnpm mcp:http
+```
+
+The HTTP server defaults to `http://127.0.0.1:3333/mcp`. Optional env vars:
+
+- `MCP_RELAY_HOST`
+- `MCP_RELAY_PORT`
+- `MCP_RELAY_ENDPOINT`
+- `MCP_RELAY_ALLOWED_HOSTS`, comma-separated
+
+MCP tools:
+
+- `read_text`: read markdown by `path`; returns `text`, window metadata, and `patchHandle`. Optional `ttlSeconds`, `startChar`, `maxChars`.
+- `apply_patch`: apply a Codex-style update patch by `patchHandle`. Optional `path` guard and `returnResult`.
+- `open_edit_session`: open a live edit session by `path`. Optional `ttlSeconds`, default 600.
+- `close_edit_session`: close a live edit session.
+- `get_cursor_context`: inspect the agent cursor or an Obsidian collaborator cursor by `userId`, `userName`, or `clientId`.
+- `list_active_cursors`: list visible Obsidian collaborator cursors for a live session.
+- `search_text`: search live Markdown text and return short match ids plus context.
+- `replace_matches`: replace stored live match ids.
+- `place_cursor`: place the agent cursor at a stored match.
+- `place_cursor_at_document_boundary`: place the agent cursor at document start or end.
+- `select_text`: select a stored match.
+- `select_current_block`: select the current Markdown source block.
+- `select_between_matches`: select a range between two stored matches.
+- `clear_selection`: collapse the current selection.
+- `insert_text`: insert raw Markdown at the agent cursor or replace the current selection.
+- `delete_selection`: delete the current selection.
+
+The MCP server intentionally does not expose `writeText`, create/rename/delete file operations, arbitrary range deletion, or sync target selection arguments.
 
 ## Development
 
@@ -121,6 +246,8 @@ pnpm test
 pnpm build
 pnpm login:github
 pnpm choose:target
+pnpm mcp:stdio
+pnpm mcp:http
 ```
 
 Verified in this workspace:
@@ -216,5 +343,11 @@ This makes the later `RelayCore.fromEnv()` and `pnpm test:live` flows simpler be
 
 - `relay-core` uses the control-plane-compatible `/token` flow, not privileged direct relay-server auth.
 - Folder entries inside `filemeta_v0` are treated as metadata within the shared folder, not as standalone Relay document resources.
-- Text writes are sent back as Yjs deltas generated from the loaded document state, so Relay peers should receive them like normal collaborative edits.
+- `readText(...)` stores the fetched Yjs document state behind a random in-memory handle; the handle itself does not embed auth.
+- `openEditSession(...)` stores a live local Yjs replica and awareness state behind a random in-memory session id; the session id itself does not embed auth.
+- `applyPatch(...)` validates and applies only `*** Update File` patches, and it matches them against the handle's stored text exactly.
+- Successful handle patches are sent back as Yjs deltas generated from the stored handle state, so Relay peers should receive them like normal collaborative edits.
+- Failed handle pushes do not persist the local handle mutation.
+- Live search match ids are also 5 characters. Anchors remain internal; tool responses return match ids, source positions, and context snippets.
+- Live match-consuming tools validate that the text at the anchored position still matches before editing. If not, they return a structured stale-match result instead of editing.
 - Relay bearer tokens do expire. The saved GitHub login config includes the auth record, and `relay-core` will attempt a PocketBase `authRefresh()` automatically when the bearer token is close to expiry.
