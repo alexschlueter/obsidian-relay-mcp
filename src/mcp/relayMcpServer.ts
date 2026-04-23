@@ -128,7 +128,7 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
         patchHandle: handleSchema.describe("Patch handle returned by read_text."),
         path: pathSchema.optional().describe("Optional path guard. If provided, it must match the patch path and handle path."),
         patch: z.string().min(1).describe("Codex-style patch containing exactly one *** Update File operation."),
-        returnResult: z.boolean().optional().describe("Whether to return local post-patch text. Defaults to true."),
+        returnResult: z.boolean().optional().describe("Whether to return local post-patch text. Defaults to false."),
       },
       annotations: {
         readOnlyHint: false,

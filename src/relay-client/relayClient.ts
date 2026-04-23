@@ -534,7 +534,7 @@ export class RelayClient {
       return {
         changed: mutation!.changed,
         staleHandle,
-        ...(options.returnResult === false ? {} : { resultText: applied.resultText }),
+        ...(options.returnResult === true ? { resultText: applied.resultText } : {}),
       };
     });
   }
