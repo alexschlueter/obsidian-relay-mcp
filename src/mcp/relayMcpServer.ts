@@ -198,7 +198,7 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
       description:
         "Returns context around this session's agent cursor, or around a matching Obsidian collaborator cursor. " +
         "If there is an active selection, also returns the selected text and exact range.\n" +
-        "For your own cursor, leave userId and clientId undefined. To discover collaborator identities, call list_active_cursors first, then use either id.\n\n" +
+        "For your own agent cursor, leave userId and clientId undefined. To discover collaborator identities, call list_active_cursors first, then use either id.\n\n" +
         "Use this when the user refers to \"here\" or \"this\" or the current selection and you want to inspect it before editing.",
       inputSchema: {
         sessionId: handleSchema,
