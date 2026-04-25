@@ -5,6 +5,7 @@ import {
   RelayApplyPatchOptions,
   RelayClient,
   RelayListFilesOptions,
+  RelayReadAttachmentOptions,
   RelayReadTextOptions,
   RELAY_HANDLE_LENGTH,
 } from "../relay-client/relayClient";
@@ -14,6 +15,7 @@ export const MCP_RELAY_DEFAULT_EDIT_SESSION_TTL_SECONDS = 600;
 
 export const RELAY_MCP_TOOL_NAMES = [
   "list_files",
+  "read_attachment",
   "read_text",
   "apply_patch",
   "open_edit_session",
@@ -115,6 +117,28 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
           startChar,
           maxChars,
         })),
+      ),
+  );
+
+  server.registerTool(
+    "read_attachment",
+    {
+      title: "Read Obsidian Attachment",
+      description:
+        "Read an Obsidian attachment by vault-relative path. Returns metadata and base64-encoded file bytes.",
+      inputSchema: {
+        path: pathSchema,
+        maxBytes: nonNegativeIntegerSchema.optional().describe("Optional maximum number of file bytes to return."),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+    },
+    async ({ path, maxBytes }) =>
+      runRelayTool(async () =>
+        client.readAttachment(path, buildReadAttachmentOptions({ maxBytes })),
       ),
   );
 
@@ -450,7 +474,7 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
   );
 }
 
-const pathSchema = z.string().min(1).describe("Vault-relative path to an Obsidian note.");
+const pathSchema = z.string().min(1).describe("Vault-relative path to an Obsidian file.");
 const handleSchema = z.string().length(RELAY_HANDLE_LENGTH).regex(/^[0-9A-Za-z]+$/);
 const ttlSecondsSchema = z.number().positive();
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
@@ -470,6 +494,15 @@ function buildReadOptions(options: RelayReadTextOptions): RelayReadTextOptions |
     ...(options.ttlSeconds === undefined ? {} : { ttlSeconds: options.ttlSeconds }),
     ...(options.startChar === undefined ? {} : { startChar: options.startChar }),
     ...(options.maxChars === undefined ? {} : { maxChars: options.maxChars }),
+  };
+  return Object.keys(definedOptions).length > 0 ? definedOptions : undefined;
+}
+
+function buildReadAttachmentOptions(
+  options: RelayReadAttachmentOptions,
+): RelayReadAttachmentOptions | undefined {
+  const definedOptions: RelayReadAttachmentOptions = {
+    ...(options.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
   };
   return Object.keys(definedOptions).length > 0 ? definedOptions : undefined;
 }

@@ -10,6 +10,10 @@ const folderId = "22222222-2222-2222-2222-222222222222";
 const folderDocId = "33333333-3333-3333-3333-333333333333";
 const noteDocId = "44444444-4444-4444-4444-444444444444";
 const notePath = "Notes/Test.md";
+const attachmentId = "77777777-7777-7777-7777-777777777777";
+const attachmentPath = "Projects/Assets/logo.png";
+const attachmentHash = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+const attachmentBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
 
 describe("RelayClient handle editing", () => {
   it("lists configured folder paths with query, prefix, kinds, and pagination", async () => {
@@ -22,8 +26,8 @@ describe("RelayClient handle editing", () => {
       id: "66666666-6666-6666-6666-666666666666",
       type: "canvas",
     });
-    harness.addFolderEntry("Projects/Assets/logo.png", {
-      id: "77777777-7777-7777-7777-777777777777",
+    harness.addFolderEntry(attachmentPath, {
+      id: attachmentId,
       type: "image",
     });
     harness.addFolderEntry("Archive/Alpha.md", {
@@ -79,6 +83,52 @@ describe("RelayClient handle editing", () => {
         kind: "attachment",
       },
     ]);
+  });
+
+  it("reads attachments as base64 with Relay file tokens", async () => {
+    const harness = createHarness("hello");
+    harness.addFolderEntry(attachmentPath, {
+      id: attachmentId,
+      type: "image",
+      hash: attachmentHash,
+      mimetype: "image/png",
+      synctime: 1234,
+    });
+    const relay = harness.createRelay();
+
+    const attachment = await relay.readAttachment(attachmentPath);
+
+    expect(attachment).toEqual({
+      ok: true,
+      relayId,
+      folderId,
+      path: attachmentPath,
+      resourceId: attachmentId,
+      type: "image",
+      contentType: "image/png",
+      contentLength: attachmentBytes.byteLength,
+      hash: attachmentHash,
+      synctime: 1234,
+      dataBase64: Buffer.from(attachmentBytes).toString("base64"),
+    });
+  });
+
+  it("rejects non-attachments and attachments over maxBytes", async () => {
+    const harness = createHarness("hello");
+    harness.addFolderEntry(attachmentPath, {
+      id: attachmentId,
+      type: "image",
+      hash: attachmentHash,
+      mimetype: "image/png",
+    });
+    const relay = harness.createRelay();
+
+    await expect(relay.readAttachment(notePath)).rejects.toThrow(
+      "Relay path Notes/Test.md is a markdown resource, not an attachment",
+    );
+    await expect(relay.readAttachment(attachmentPath, { maxBytes: 3 })).rejects.toThrow(
+      "Relay file is 6 bytes, which exceeds maxBytes 3",
+    );
   });
 
   it("returns a fresh handle for each read and applies update-file patches", async () => {
@@ -286,6 +336,28 @@ function createHarness(initialText: string) {
       });
     }
 
+    if (url === "https://api.system3.md/file-token") {
+      const payload = JSON.parse(String(init?.body ?? "{}")) as {
+        docId?: string;
+        hash?: string;
+        contentType?: string;
+        contentLength?: number;
+      };
+      if (payload.docId !== attachmentId || payload.hash !== attachmentHash) {
+        throw new Error(`Unexpected file token payload: ${String(init?.body ?? "")}`);
+      }
+
+      return jsonResponse({
+        doc: `${relayId}-${attachmentId}`,
+        folder: folderId,
+        token: "file-token",
+        baseUrl: `https://relay.test/f/${attachmentId}`,
+        file: payload.hash,
+        contentType: payload.contentType,
+        contentLength: payload.contentLength,
+      });
+    }
+
     if (url === `https://relay.test/doc/${folderDocId}/as-update`) {
       return binaryResponse(Y.encodeStateAsUpdate(docs.get(folderDocId)!));
     }
@@ -311,6 +383,23 @@ function createHarness(initialText: string) {
       return new Response(null, { status: 200 });
     }
 
+    if (url === `https://relay.test/f/${attachmentId}/download-url`) {
+      const headers = init?.headers as Record<string, string> | undefined;
+      if (headers?.Authorization !== "Bearer file-token") {
+        throw new Error("Expected attachment download-url request to use the file token");
+      }
+      return jsonResponse({
+        downloadUrl: "https://download.test/logo.png",
+      });
+    }
+
+    if (url === "https://download.test/logo.png") {
+      return binaryResponse(attachmentBytes, {
+        "Content-Type": "image/png",
+        "Content-Length": String(attachmentBytes.byteLength),
+      });
+    }
+
     throw new Error(`Unexpected request URL: ${url}`);
   };
 
@@ -332,7 +421,10 @@ function createHarness(initialText: string) {
     createRelay(options: { liveWebSocket?: boolean } = {}) {
       return this.createRelayWithOptions(options);
     },
-    addFolderEntry(path: string, meta: { id: string; type: string }) {
+    addFolderEntry(
+      path: string,
+      meta: { id: string; type: string; hash?: string; mimetype?: string; synctime?: number },
+    ) {
       folderDoc.getMap("filemeta_v0").set(path, meta);
     },
     get failNextUpdate() {
@@ -469,9 +561,10 @@ function splitPatchLines(text: string): string[] {
   return lines;
 }
 
-function binaryResponse(bytes: Uint8Array): Response {
+function binaryResponse(bytes: Uint8Array, headers: HeadersInit = {}): Response {
   return new Response(Buffer.from(bytes), {
     status: 200,
+    headers,
   });
 }
 

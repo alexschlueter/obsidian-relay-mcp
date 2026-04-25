@@ -3,6 +3,7 @@ import { ClientToken, RelayAuthClient, RelayAuthClientOptions } from "./auth";
 import { applyCodexUpdatePatch } from "./codexPatch";
 import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig } from "./config";
 import { LoadedTextDocument, RelayDocClient } from "./docClient";
+import { RelayFileClient } from "./fileClient";
 import { FolderEntry, FolderIndex, normalizeRelayPath, toS3Resource } from "./folderIndex";
 import { LiveRelayProvider, LiveRelayProviderOptions } from "./liveProvider";
 import {
@@ -15,7 +16,7 @@ import {
   SearchTextResult,
   SelectCurrentBlockResult,
 } from "./liveSession";
-import { S3RemoteFolder } from "./s3rn";
+import { S3RemoteFile, S3RemoteFolder } from "./s3rn";
 import { patchText as applyTextPatch, replaceText, TextMutationResult } from "./textPatch";
 
 export interface RelayClientConfig extends RelayAuthClientOptions {
@@ -80,9 +81,30 @@ export interface RelayListFilesResult {
   nextOffset?: number;
 }
 
+export interface RelayReadAttachmentOptions {
+  maxBytes?: number;
+}
+
+export interface RelayReadAttachmentResult {
+  ok: true;
+  relayId: string;
+  folderId: string;
+  path: string;
+  resourceId: string;
+  type: FolderEntry["type"];
+  contentType?: string;
+  contentLength: number;
+  hash: string;
+  synctime?: number;
+  dataBase64: string;
+}
+
 type RelayReadArgs =
   | [string, (number | RelayReadTextOptions)?]
   | [string, string, string, (number | RelayReadTextOptions)?];
+type RelayReadAttachmentArgs =
+  | [string, RelayReadAttachmentOptions?]
+  | [string, string, string, RelayReadAttachmentOptions?];
 type RelayApplyPatchArgs = [string, string, RelayApplyPatchOptions?] | [string, string, string, RelayApplyPatchOptions?];
 type RelayOpenEditSessionArgs =
   | [string, string, number?]
@@ -102,6 +124,7 @@ export interface RelayWriteResult {
 export class RelayClient {
   readonly auth: RelayAuthClient;
   readonly docClient: RelayDocClient;
+  readonly fileClient: RelayFileClient;
   readonly defaultRelayId?: string;
   readonly defaultFolderId?: string;
   private readonly liveProviderOptions: LiveRelayProviderOptions;
@@ -113,6 +136,7 @@ export class RelayClient {
   constructor(config: RelayClientConfig) {
     this.auth = new RelayAuthClient(config);
     this.docClient = new RelayDocClient({ fetch: config.fetch });
+    this.fileClient = new RelayFileClient({ fetch: config.fetch });
     this.defaultRelayId = config.relayId;
     this.defaultFolderId = config.folderId;
     this.liveProviderOptions = config.liveProvider ?? {};
@@ -189,6 +213,55 @@ export class RelayClient {
       returnedCount: entries.length,
       offset,
       ...(nextOffset === undefined ? {} : { nextOffset }),
+    };
+  }
+
+  async readAttachment(
+    path: string,
+    options?: RelayReadAttachmentOptions,
+  ): Promise<RelayReadAttachmentResult>;
+  async readAttachment(
+    relayId: string,
+    folderId: string,
+    path: string,
+    options?: RelayReadAttachmentOptions,
+  ): Promise<RelayReadAttachmentResult>;
+  async readAttachment(...args: RelayReadAttachmentArgs): Promise<RelayReadAttachmentResult> {
+    const { address, options } = this.parseReadAttachmentArgs(args);
+    const folder = await this.loadFolder(address.relayId, address.folderId);
+    const entry = folder.getByPath(address.path);
+    if (!entry) {
+      throw new Error(`Relay path not found: ${address.path}`);
+    }
+    if (entry.resourceKind !== "file") {
+      throw new Error(`Relay path ${address.path} is a ${entry.type} resource, not an attachment`);
+    }
+    if (!entry.hash) {
+      throw new Error(`Relay attachment ${address.path} is missing a content hash`);
+    }
+
+    const resource = toS3Resource(address.relayId, address.folderId, entry);
+    if (!(resource instanceof S3RemoteFile)) {
+      throw new Error(`Relay path ${address.path} is not a file resource`);
+    }
+
+    const requestedContentType = entry.mimetype ?? "application/octet-stream";
+    const fileToken = await this.auth.issueFileToken(resource, entry.hash, requestedContentType, 0);
+    const downloaded = await this.fileClient.downloadFile(fileToken, options);
+    const contentType = entry.mimetype ?? downloaded.contentType ?? fileToken.contentType;
+
+    return {
+      ok: true,
+      relayId: address.relayId,
+      folderId: address.folderId,
+      path: entry.path,
+      resourceId: entry.id,
+      type: entry.type,
+      ...(contentType === undefined ? {} : { contentType }),
+      contentLength: downloaded.bytes.byteLength,
+      hash: entry.hash,
+      ...(entry.synctime === undefined ? {} : { synctime: entry.synctime }),
+      dataBase64: Buffer.from(downloaded.bytes).toString("base64"),
     };
   }
 
@@ -798,6 +871,36 @@ export class RelayClient {
     };
   }
 
+  private parseReadAttachmentArgs(
+    args: RelayReadAttachmentArgs,
+  ): { address: TextAddress; options: RelayReadAttachmentOptions } {
+    if (args.length === 1 || args.length === 2) {
+      const coordinates = this.resolveFolderCoordinates();
+      return {
+        address: {
+          ...coordinates,
+          path: normalizeRelayPath(args[0]),
+        },
+        options: parseReadAttachmentOptions(args[1]),
+      };
+    }
+
+    const [relayId, folderId, rawPath, rawOptions] = args as [
+      string,
+      string,
+      string,
+      RelayReadAttachmentOptions?,
+    ];
+    return {
+      address: {
+        relayId,
+        folderId,
+        path: normalizeRelayPath(rawPath),
+      },
+      options: parseReadAttachmentOptions(rawOptions),
+    };
+  }
+
   private parseOpenEditSessionArgs(
     args: RelayOpenEditSessionArgs,
   ): { address: TextAddress; agentName: string; ttlMs: number } {
@@ -993,6 +1096,20 @@ function assertNoDeprecatedTtlMs(rawOptions: RelayReadTextOptions): void {
   if ("ttlMs" in rawOptions) {
     throw new Error("ttlMs was renamed to ttlSeconds; pass TTL values in seconds");
   }
+}
+
+function parseReadAttachmentOptions(
+  rawOptions: RelayReadAttachmentOptions | undefined,
+): RelayReadAttachmentOptions {
+  if (rawOptions?.maxBytes === undefined) {
+    return {};
+  }
+  if (!Number.isFinite(rawOptions.maxBytes) || rawOptions.maxBytes < 0) {
+    throw new Error(`Expected a non-negative maxBytes value, received ${rawOptions.maxBytes}`);
+  }
+  return {
+    maxBytes: Math.trunc(rawOptions.maxBytes),
+  };
 }
 
 type CursorEdge = "start" | "end";

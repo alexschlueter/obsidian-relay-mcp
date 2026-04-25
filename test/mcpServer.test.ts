@@ -83,6 +83,40 @@ describe("Relay MCP server", () => {
     });
   });
 
+  it("maps read_attachment camelCase args to RelayClient readAttachment options", async () => {
+    const fakeClient = createFakeRelayClient();
+
+    await withMcpClient(fakeClient, async ({ client }) => {
+      const result = await client.callTool({
+        name: "read_attachment",
+        arguments: {
+          path: "Images/logo.png",
+          maxBytes: 4096,
+        },
+      });
+
+      expect(result.structuredContent).toEqual({
+        ok: true,
+        path: "Images/logo.png",
+        resourceId: "77777777-7777-7777-7777-777777777777",
+        type: "image",
+        contentType: "image/png",
+        contentLength: 3,
+        hash: "abcdef",
+        dataBase64: "UE5H",
+      });
+      expect(fakeClient.calls).toContainEqual({
+        method: "readAttachment",
+        args: [
+          "Images/logo.png",
+          {
+            maxBytes: 4096,
+          },
+        ],
+      });
+    });
+  });
+
   it("maps list_files camelCase args to RelayClient listFiles", async () => {
     const fakeClient = createFakeRelayClient();
 
@@ -250,6 +284,7 @@ interface FakeRelayClient {
   calls: FakeCall[];
   failRead: boolean;
   listFiles(options?: unknown): Promise<unknown>;
+  readAttachment(path: string, options?: unknown): Promise<unknown>;
   readText(path: string, options?: unknown): Promise<unknown>;
   patchText(...args: unknown[]): Promise<unknown>;
   openEditSession(path: string, agentName: string, ttlSeconds?: number): Promise<unknown>;
@@ -303,6 +338,19 @@ function createFakeRelayClient(): FakeRelayClient {
         startChar: 0,
         endChar: 5,
         truncated: false,
+      };
+    },
+    async readAttachment(path, options) {
+      calls.push({ method: "readAttachment", args: options === undefined ? [path] : [path, options] });
+      return {
+        ok: true,
+        path,
+        resourceId: "77777777-7777-7777-7777-777777777777",
+        type: "image",
+        contentType: "image/png",
+        contentLength: 3,
+        hash: "abcdef",
+        dataBase64: "UE5H",
       };
     },
     async patchText(...args) {

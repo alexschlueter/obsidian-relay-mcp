@@ -15,10 +15,31 @@ export interface ClientToken {
   fileHash?: number;
 }
 
+export interface FileToken {
+  url?: string;
+  baseUrl: string;
+  docId?: string;
+  doc?: string;
+  folder: string;
+  token: string;
+  authorization?: "full" | "read-only";
+  expiryTime?: number;
+  contentType?: string;
+  contentLength?: number;
+  file?: string;
+  fileHash?: string;
+}
+
 export interface TokenRequestPayload {
   docId: string;
   relay: string;
   folder: string;
+}
+
+export interface FileTokenRequestPayload extends TokenRequestPayload {
+  hash: string;
+  contentType: string;
+  contentLength: number;
 }
 
 export interface RelayAuthClientOptions {
@@ -33,9 +54,9 @@ export interface RelayAuthClientOptions {
   tokenRefreshMarginMs?: number;
 }
 
-interface CachedToken {
+interface CachedToken<T> {
   expiresAt: number;
-  token: ClientToken;
+  token: T;
 }
 
 export class RelayAuthClient {
@@ -48,7 +69,8 @@ export class RelayAuthClient {
   private readonly relayVersion?: string;
   private readonly tokenRefreshMarginMs: number;
   private readonly bearerTokenRefreshMarginMs: number;
-  private readonly cache = new Map<string, CachedToken>();
+  private readonly cache = new Map<string, CachedToken<ClientToken>>();
+  private readonly fileCache = new Map<string, CachedToken<FileToken>>();
   private activeBearerRefresh?: Promise<void>;
 
   constructor(options: RelayAuthClientOptions) {
@@ -104,12 +126,61 @@ export class RelayAuthClient {
     return clientToken;
   }
 
+  async issueFileToken(
+    resource: S3RemoteFile,
+    fileHash: string,
+    contentType: string,
+    contentLength: number,
+  ): Promise<FileToken> {
+    await this.maybeRefreshBearerToken();
+
+    const cacheKey = this.buildFileCacheKey(resource, fileHash, contentType, contentLength);
+    const cached = this.fileCache.get(cacheKey);
+    if (cached && Date.now() + this.tokenRefreshMarginMs < cached.expiresAt) {
+      return cached.token;
+    }
+
+    const payload = this.buildFilePayload(resource, fileHash, contentType, contentLength);
+    const response = await this.fetchImpl(`${this.apiUrl}/file-token`, {
+      method: "POST",
+      headers: this.buildHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Relay file token request failed (${response.status}): ${await safeReadResponseText(response)}`,
+      );
+    }
+
+    const fileToken = (await response.json()) as FileToken;
+    this.assertFileToken(fileToken, resource);
+
+    if (typeof fileToken.expiryTime === "number" && fileToken.expiryTime > Date.now()) {
+      this.fileCache.set(cacheKey, {
+        token: fileToken,
+        expiresAt: fileToken.expiryTime,
+      });
+    } else {
+      this.fileCache.delete(cacheKey);
+    }
+
+    return fileToken;
+  }
+
   clearCache(resource?: S3RNType): void {
     if (!resource) {
       this.cache.clear();
+      this.fileCache.clear();
       return;
     }
-    this.cache.delete(S3RN.encode(resource));
+    const resourceKey = S3RN.encode(resource);
+    this.cache.delete(resourceKey);
+    for (const key of this.fileCache.keys()) {
+      if (key.startsWith(`${resourceKey}:`)) {
+        this.fileCache.delete(key);
+      }
+    }
   }
 
   private async maybeRefreshBearerToken(): Promise<void> {
@@ -217,9 +288,40 @@ export class RelayAuthClient {
     };
   }
 
+  private buildFilePayload(
+    resource: S3RemoteFile,
+    fileHash: string,
+    contentType: string,
+    contentLength: number,
+  ): FileTokenRequestPayload {
+    return {
+      docId: resource.fileId,
+      relay: resource.relayId,
+      folder: resource.folderId,
+      hash: fileHash,
+      contentType,
+      contentLength,
+    };
+  }
+
+  private buildFileCacheKey(
+    resource: S3RemoteFile,
+    fileHash: string,
+    contentType: string,
+    contentLength: number,
+  ): string {
+    return `${S3RN.encode(resource)}:${fileHash}:${contentType}:${contentLength}`;
+  }
+
   private assertClientToken(token: ClientToken, resource: S3RNType): void {
     if (!token.url || !token.docId || !token.token) {
       throw new Error(`Relay returned an incomplete client token for ${S3RN.encode(resource)}`);
+    }
+  }
+
+  private assertFileToken(token: FileToken, resource: S3RemoteFile): void {
+    if (!token.baseUrl || !token.token || (!token.docId && !token.doc)) {
+      throw new Error(`Relay returned an incomplete file token for ${S3RN.encode(resource)}`);
     }
   }
 }

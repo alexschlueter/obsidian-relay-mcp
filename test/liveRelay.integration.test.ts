@@ -1,26 +1,31 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { loadRelayClientFileConfig, RelayClient } from "../src";
 
 const storedConfig = loadRelayClientFileConfig().config;
-const missingConfiguration = [
+const missingBaseConfiguration = [
   ...(process.env.RELAY_BEARER_TOKEN ?? storedConfig?.bearerToken ? [] : ["RELAY_BEARER_TOKEN or saved config"]),
   ...(process.env.RELAY_ID ?? storedConfig?.relayId ? [] : ["RELAY_ID or saved config"]),
   ...(process.env.RELAY_FOLDER_ID ?? storedConfig?.folderId ? [] : ["RELAY_FOLDER_ID or saved config"]),
-  ...(process.env.RELAY_LIVE_TEST_NOTE_PATH ? [] : ["RELAY_LIVE_TEST_NOTE_PATH"]),
 ] as const;
 
-const liveTestEnabled = missingConfiguration.length === 0;
+const liveBaseEnabled = missingBaseConfiguration.length === 0;
 const writeRoundTripEnabled = isTruthy(process.env.RELAY_LIVE_TEST_WRITE);
 const notePath = process.env.RELAY_LIVE_TEST_NOTE_PATH ?? "";
+const attachmentPath = process.env.RELAY_LIVE_TEST_ATTACHMENT_PATH ?? "";
+const attachmentMaxBytes = parseInteger(process.env.RELAY_LIVE_TEST_ATTACHMENT_MAX_BYTES, 5_000_000);
 const timeoutMs = parseInteger(process.env.RELAY_LIVE_TEST_TIMEOUT_MS, 20_000);
 const editSessionTtlSeconds = Math.ceil(timeoutMs / 1000);
 const pollIntervalMs = parseInteger(process.env.RELAY_LIVE_TEST_POLL_MS, 500);
 const liveIntegrationAgentName = "mcp-relay live integration";
 
-const describeLive = liveTestEnabled ? describe : describe.skip;
+const describeLive = liveBaseEnabled ? describe : describe.skip;
 
 describeLive("Relay live integration", () => {
-  it(
+  const noteTest = notePath ? it : it.skip;
+  const attachmentTest = attachmentPath ? it : it.skip;
+
+  noteTest(
     "reads a configured note from the live Relay folder",
     async () => {
       const relay = RelayClient.fromEnv();
@@ -40,9 +45,75 @@ describeLive("Relay live integration", () => {
     timeoutMs,
   );
 
-  const writeTest = writeRoundTripEnabled ? it : it.skip;
+  attachmentTest(
+    "reads a configured attachment from the live Relay folder",
+    async () => {
+      const relay = RelayClient.fromEnv();
+      const folder = await relay.loadFolder();
+      const entry = relay.resolvePath(folder, attachmentPath);
 
-  it(
+      expect(
+        entry,
+        `Expected ${attachmentPath} to exist in the configured Relay folder`,
+      ).toBeDefined();
+      expect(entry?.resourceKind).toBe("file");
+      const entryHash = entry?.hash;
+      expect(entryHash, `Expected ${attachmentPath} to have attachment hash metadata`).toEqual(
+        expect.stringMatching(/^[0-9a-f]{64}$/i),
+      );
+
+      const listed = await relay.listFiles({
+        query: attachmentPath,
+        maxResults: 200,
+      });
+      expect(listed.entries).toContainEqual({
+        path: attachmentPath,
+        kind: "attachment",
+      });
+
+      const attachment = await relay.readAttachment(attachmentPath, {
+        maxBytes: attachmentMaxBytes,
+      });
+      const bytes = Buffer.from(attachment.dataBase64, "base64");
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+
+      expect(attachment).toMatchObject({
+        ok: true,
+        path: attachmentPath,
+        resourceId: entry!.id,
+        type: entry!.type,
+        hash: entryHash,
+      });
+      expect(attachment.contentLength).toBe(bytes.byteLength);
+      expect(attachment.hash).toBe(entryHash);
+      expect(attachment.hash).toBe(sha256);
+      if (entry?.mimetype) {
+        expect(attachment.contentType).toBe(entry.mimetype);
+      }
+
+      const boundedRead = await relay.readAttachment(attachmentPath, {
+        maxBytes: attachment.contentLength,
+      });
+      expect(boundedRead.dataBase64).toBe(attachment.dataBase64);
+
+      if (attachment.contentLength > 0) {
+        await expect(
+          relay.readAttachment(attachmentPath, {
+            maxBytes: attachment.contentLength - 1,
+          }),
+        ).rejects.toThrow("exceeds maxBytes");
+      }
+
+      console.log(
+        `[live-relay] resolved attachment ${attachmentPath} -> ${entry?.id} (${attachment.contentLength} bytes)`,
+      );
+    },
+    timeoutMs,
+  );
+
+  const writeTest = notePath && writeRoundTripEnabled ? it : it.skip;
+
+  noteTest(
     "opens a live edit session and publishes an agent cursor",
     async () => {
       const relay = RelayClient.fromEnv();
@@ -314,14 +385,26 @@ describeLive("Relay live integration", () => {
   );
 });
 
-if (!liveTestEnabled) {
+if (!liveBaseEnabled) {
   describe("Relay live integration setup", () => {
     it("documents the missing env vars for the live test", () => {
       console.log(
-        `[live-relay] skipped because this configuration is missing: ${missingConfiguration.join(", ")}`,
+        `[live-relay] skipped because this base configuration is missing: ${missingBaseConfiguration.join(", ")}`,
       );
+      console.log("[live-relay] set RELAY_LIVE_TEST_NOTE_PATH to include note smoke tests");
       console.log(
         "[live-relay] set RELAY_LIVE_TEST_WRITE=1 as well if you want the reversible write smoke test",
+      );
+      console.log(
+        "[live-relay] set RELAY_LIVE_TEST_ATTACHMENT_PATH to include the read-only attachment smoke test",
+      );
+    });
+  });
+} else if (!notePath && !attachmentPath) {
+  describe("Relay live integration setup", () => {
+    it("documents the missing live test paths", () => {
+      console.log(
+        "[live-relay] skipped because no live test path is configured: set RELAY_LIVE_TEST_NOTE_PATH and/or RELAY_LIVE_TEST_ATTACHMENT_PATH",
       );
     });
   });

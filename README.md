@@ -261,19 +261,20 @@ Verified in this workspace:
 
 ## Live Test
 
-There is now a real integration test for a live Relay-backed note:
+There is now a real integration test for a live Relay-backed note, with an optional read-only attachment check:
 
-- [test/liveRelay.integration.test.ts](/home/alex/code/mcp-relay/test/liveRelay.integration.test.ts)
+- [test/liveRelay.integration.test.ts](/home/alex/code/obsidian-relay-mcp/test/liveRelay.integration.test.ts)
 
-It stays skipped unless these env vars are set:
+The live test file needs credentials and a sync target from saved config or env:
 
 - `RELAY_API_URL`
 - `RELAY_BEARER_TOKEN`
 - `RELAY_ID`
 - `RELAY_FOLDER_ID`
-- `RELAY_LIVE_TEST_NOTE_PATH`
 
-Run the read-only smoke test:
+The note tests additionally need `RELAY_LIVE_TEST_NOTE_PATH`.
+
+Run the read-only note smoke test:
 
 ```bash
 RELAY_API_URL=...
@@ -283,6 +284,19 @@ RELAY_FOLDER_ID=...
 RELAY_LIVE_TEST_NOTE_PATH="Path/To/Safe-Test-Note.md" \
 pnpm test:live
 ```
+
+To verify only attachment downloads, point the test at a small attachment in the same vault:
+
+```bash
+RELAY_API_URL=...
+RELAY_BEARER_TOKEN=...
+RELAY_ID=...
+RELAY_FOLDER_ID=...
+RELAY_LIVE_TEST_ATTACHMENT_PATH="Path/To/Image.png" \
+pnpm vitest run test/liveRelay.integration.test.ts -t "reads a configured attachment"
+```
+
+`RELAY_LIVE_TEST_ATTACHMENT_MAX_BYTES` defaults to `5000000`.
 
 If you already saved credentials into `.relay-client.json`, you can omit `RELAY_API_URL` and `RELAY_BEARER_TOKEN`, and you can omit `RELAY_ID` / `RELAY_FOLDER_ID` too if those are also stored in the config.
 

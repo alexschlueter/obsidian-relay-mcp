@@ -3,6 +3,7 @@ export * from "./relay-client/codexPatch";
 export * from "./relay-client/config";
 export * from "./relay-client/docClient";
 export * from "./relay-client/directory";
+export * from "./relay-client/fileClient";
 export * from "./relay-client/folderIndex";
 export * from "./relay-client/liveProvider";
 export * from "./relay-client/liveSession";
