@@ -125,21 +125,18 @@ export function registerRelayMcpTools(server: McpServer, client: RelayClient): v
     {
       title: "Read Obsidian Attachment",
       description:
-        "Read an Obsidian attachment by vault-relative path. Returns metadata and base64-encoded file bytes.",
-      inputSchema: {
-        path: pathSchema,
-        maxBytes: nonNegativeIntegerSchema.optional().describe("Optional maximum number of file bytes to return."),
-      },
+        "Read an Obsidian attachment by vault-relative path. Returns a JSON metadata block with a download URL and optionally includes configured inline content.",
+      inputSchema: buildReadAttachmentInputSchema(client),
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
         openWorldHint: false,
       },
     },
-    async ({ path, maxBytes }) =>
-      runRelayTool(async () =>
-        client.readAttachment(path, buildReadAttachmentOptions({ maxBytes })),
-      ),
+    async (args) => {
+      const options = args as unknown as ReadAttachmentToolArgs;
+      return runRelayAttachmentTool(client, options);
+    },
   );
 
   server.registerTool(
@@ -480,6 +477,10 @@ const ttlSecondsSchema = z.number().positive();
 const nonNegativeIntegerSchema = z.number().int().nonnegative();
 const cursorEdgeSchema = z.enum(["start", "end"]);
 
+interface ReadAttachmentToolArgs extends RelayReadAttachmentOptions {
+  path: string;
+}
+
 function buildListFilesOptions(options: RelayListFilesOptions): RelayListFilesOptions {
   return {
     ...(options.query === undefined ? {} : { query: options.query }),
@@ -498,11 +499,40 @@ function buildReadOptions(options: RelayReadTextOptions): RelayReadTextOptions |
   return Object.keys(definedOptions).length > 0 ? definedOptions : undefined;
 }
 
-function buildReadAttachmentOptions(
-  options: RelayReadAttachmentOptions,
-): RelayReadAttachmentOptions | undefined {
+function buildReadAttachmentInputSchema(client: RelayClient): Record<string, z.ZodTypeAny> {
+  const config = client.attachmentContentConfig;
+  const inputSchema: Record<string, z.ZodTypeAny> = {
+    path: pathSchema,
+  };
+
+  if (config.includeTextContent) {
+    inputSchema.includeTextContent = z.boolean().optional().describe("Whether to include decoded text in the JSON response when the attachment is text-like.");
+    inputSchema.maxTextChars = z.number().int().positive().max(config.maxTextChars).optional().describe(`Maximum text characters to include. Capped by server config at ${config.maxTextChars}.`);
+  }
+  if (config.includeImageContent) {
+    inputSchema.includeImageContent = z.boolean().optional().describe("Whether to directly include images in returned content.");
+    inputSchema.maxImageContentMB = z.number().positive().max(config.maxImageContentMB).optional().describe(`Maximum image size in MB to include. Capped by server config at ${config.maxImageContentMB}.`);
+  }
+  if (config.includeAudioContent) {
+    inputSchema.includeAudioContent = z.boolean().optional().describe("Whether to directly include audio in returned content.");
+    inputSchema.maxAudioContentMB = z.number().positive().max(config.maxAudioContentMB).optional().describe(`Maximum audio size in MB to include. Capped by server config at ${config.maxAudioContentMB}.`);
+  }
+
+  return inputSchema;
+}
+
+function buildReadAttachmentOptions(client: RelayClient, args: ReadAttachmentToolArgs): RelayReadAttachmentOptions | undefined {
+  const config = client.attachmentContentConfig;
   const definedOptions: RelayReadAttachmentOptions = {
-    ...(options.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
+    ...(config.includeTextContent && args.includeTextContent !== false
+      ? { includeTextContent: true, maxTextChars: Math.min(args.maxTextChars ?? config.maxTextChars, config.maxTextChars) }
+      : {}),
+    ...(config.includeImageContent && args.includeImageContent !== false
+      ? { includeImageContent: true, maxImageContentMB: Math.min(args.maxImageContentMB ?? config.maxImageContentMB, config.maxImageContentMB) }
+      : {}),
+    ...(config.includeAudioContent && args.includeAudioContent !== false
+      ? { includeAudioContent: true, maxAudioContentMB: Math.min(args.maxAudioContentMB ?? config.maxAudioContentMB, config.maxAudioContentMB) }
+      : {}),
   };
   return Object.keys(definedOptions).length > 0 ? definedOptions : undefined;
 }
@@ -524,6 +554,59 @@ async function runRelayTool(fn: () => unknown | Promise<unknown>): Promise<CallT
       true,
     );
   }
+}
+
+async function runRelayAttachmentTool(client: RelayClient, args: ReadAttachmentToolArgs): Promise<CallToolResult> {
+  try {
+    const attachment = await client.readAttachment(args.path, buildReadAttachmentOptions(client, args));
+    return attachmentToolResult(attachment);
+  } catch (error) {
+    return jsonToolResult(
+      {
+        ok: false,
+        reason: "toolError",
+        message: errorMessage(error),
+      },
+      true,
+    );
+  }
+}
+
+function attachmentToolResult(value: unknown): CallToolResult {
+  const structuredContent = toStructuredContent(value);
+  const contentType = typeof structuredContent.contentType === "string"
+    ? structuredContent.contentType
+    : undefined;
+  const dataBase64 = typeof structuredContent.dataBase64 === "string"
+    ? structuredContent.dataBase64
+    : undefined;
+  delete structuredContent.dataBase64;
+
+  const content: CallToolResult["content"] = [
+    {
+      type: "text",
+      text: JSON.stringify(structuredContent, null, 2),
+    },
+  ];
+
+  if (dataBase64 && contentType?.toLocaleLowerCase().startsWith("image/")) {
+    content.push({
+      type: "image",
+      data: dataBase64,
+      mimeType: contentType,
+    });
+  } else if (dataBase64 && contentType?.toLocaleLowerCase().startsWith("audio/")) {
+    content.push({
+      type: "audio",
+      data: dataBase64,
+      mimeType: contentType,
+    });
+  }
+
+  return {
+    content,
+    structuredContent,
+  };
 }
 
 function jsonToolResult(value: unknown, isError = false): CallToolResult {

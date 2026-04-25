@@ -26,7 +26,6 @@ Better shape:
 
 - `structuredContent`: metadata only: path, hash, contentType, contentLength
 - `content`: one JSON/text metadata item plus one `image` item when `contentType` starts with `image/`
-- for PDFs/audio/video/unknown files, keep base64 or maybe return an MCP resource/blob depending on client support
 
 So right now the tool is functionally capable, but not ergonomically vision-native. We should patch `read_attachment` tool output so image attachments are returned as MCP image content.
 
@@ -70,7 +69,6 @@ For a tool result, MCP content is a list of content blocks. In the current MCP s
 - audio
 - resource_link
 - resource
-- There is no type: "pdf" content block.
 
 Images are first-class:
 
@@ -165,7 +163,7 @@ A few safeguards matter:
 
 - Only decode as UTF-8 when the MIME type or extension indicates text.
 - If decoding produces replacement characters heavily, fall back to blob/base64.
-- Add `maxBytes`, already present, to prevent accidental giant file ingestion.
+- Use the configured per-type inclusion limits to prevent accidental giant file ingestion.
 - For `.base`, `.json`, `.csv`, `.txt`, `.md`, `.xml`, `.yaml`, this becomes immediately useful.
 
 One subtle thing: Obsidian may classify unsupported text files as generic `file`, but MIME type might still be useful. If `mimetype` is missing, we can infer from extension as a fallback.

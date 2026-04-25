@@ -72,16 +72,19 @@ describeLive("Relay live integration", () => {
       });
 
       const attachment = await relay.readAttachment(attachmentPath, {
-        maxBytes: attachmentMaxBytes,
+        includeImageContent: entry?.mimetype?.toLocaleLowerCase().startsWith("image/") === true,
+        maxImageContentMB: attachmentMaxBytes / 1024 / 1024,
       });
-      const bytes = Buffer.from(attachment.dataBase64, "base64");
+      expect(
+        attachment.dataBase64,
+        `Expected ${attachmentPath} to return inline image data for the live attachment smoke test`,
+      ).toBeDefined();
+      const dataBase64 = attachment.dataBase64!;
+      const bytes = Buffer.from(dataBase64, "base64");
       const sha256 = createHash("sha256").update(bytes).digest("hex");
 
       expect(attachment).toMatchObject({
         ok: true,
-        path: attachmentPath,
-        resourceId: entry!.id,
-        type: entry!.type,
         hash: entryHash,
       });
       expect(attachment.contentLength).toBe(bytes.byteLength);
@@ -92,16 +95,18 @@ describeLive("Relay live integration", () => {
       }
 
       const boundedRead = await relay.readAttachment(attachmentPath, {
-        maxBytes: attachment.contentLength,
+        includeImageContent: true,
+        maxImageContentMB: attachment.contentLength! / 1024 / 1024,
       });
       expect(boundedRead.dataBase64).toBe(attachment.dataBase64);
 
-      if (attachment.contentLength > 0) {
+      if (attachment.contentLength! > 0) {
         await expect(
           relay.readAttachment(attachmentPath, {
-            maxBytes: attachment.contentLength - 1,
+            includeImageContent: true,
+            maxImageContentMB: (attachment.contentLength! - 1) / 1024 / 1024,
           }),
-        ).rejects.toThrow("exceeds maxBytes");
+        ).rejects.toThrow("exceeds maximum included content size");
       }
 
       console.log(

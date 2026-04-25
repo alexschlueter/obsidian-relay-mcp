@@ -18,6 +18,7 @@
     "login:github": "tsc -p tsconfig.json && node dist/bin/relay-github-login.js",
     "mcp:http": "tsc -p tsconfig.json && node dist/bin/mcp-relay-http.js",
     "mcp:stdio": "tsc -p tsconfig.json && node dist/bin/mcp-relay-stdio.js",
+    "probe:file-token": "tsc -p tsconfig.json && node dist/bin/relay-probe-file-token.js",
     "test": "vitest run",
     "test:live": "vitest run test/liveRelay.integration.test.ts"
   },

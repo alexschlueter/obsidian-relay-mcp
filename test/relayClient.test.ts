@@ -85,7 +85,7 @@ describe("RelayClient handle editing", () => {
     ]);
   });
 
-  it("reads attachments as base64 with Relay file tokens", async () => {
+  it("reads attachment download URLs with Relay file tokens without downloading content by default", async () => {
     const harness = createHarness("hello");
     harness.addFolderEntry(attachmentPath, {
       id: attachmentId,
@@ -100,20 +100,81 @@ describe("RelayClient handle editing", () => {
 
     expect(attachment).toEqual({
       ok: true,
-      relayId,
-      folderId,
-      path: attachmentPath,
-      resourceId: attachmentId,
+      url: "https://download.test/logo.png",
+      contentType: "image/png",
+      expiresAt: "2033-05-18T03:33:20.000Z",
+      hash: attachmentHash,
+    });
+    expect(harness.getAttachmentDownloadCount()).toBe(0);
+  });
+
+  it("includes image attachment bytes when requested", async () => {
+    const harness = createHarness("hello");
+    harness.addFolderEntry(attachmentPath, {
+      id: attachmentId,
       type: "image",
+      hash: attachmentHash,
+      mimetype: "image/png",
+    });
+    const relay = harness.createRelay();
+
+    const attachment = await relay.readAttachment(attachmentPath, {
+      includeImageContent: true,
+      maxImageContentMB: 1,
+    });
+
+    expect(attachment).toEqual({
+      ok: true,
+      url: "https://download.test/logo.png",
       contentType: "image/png",
       contentLength: attachmentBytes.byteLength,
+      expiresAt: "2033-05-18T03:33:20.000Z",
       hash: attachmentHash,
-      synctime: 1234,
       dataBase64: Buffer.from(attachmentBytes).toString("base64"),
+    });
+    expect(harness.getAttachmentDownloadCount()).toBe(1);
+  });
+
+  it("includes truncated text attachment content in the JSON result when requested", async () => {
+    const harness = createHarness("hello");
+    harness.setAttachmentBytes(Buffer.from("abcdef", "utf8"));
+    harness.addFolderEntry(attachmentPath, {
+      id: attachmentId,
+      type: "file",
+      hash: attachmentHash,
+      mimetype: "text/plain",
+    });
+    const relay = harness.createRelay();
+
+    const attachment = await relay.readAttachment(attachmentPath, {
+      includeTextContent: true,
+      maxTextChars: 3,
+    });
+
+    expect(attachment).toEqual({
+      ok: true,
+      url: "https://download.test/logo.png",
+      contentType: "text/plain",
+      contentLength: 6,
+      expiresAt: "2033-05-18T03:33:20.000Z",
+      hash: attachmentHash,
+      text: "abc",
+      truncated: true,
     });
   });
 
-  it("rejects non-attachments and attachments over maxBytes", async () => {
+  it("rejects fractional maxTextChars values", async () => {
+    const relay = createHarness("hello").createRelay();
+
+    await expect(
+      relay.readAttachment(attachmentPath, {
+        includeTextContent: true,
+        maxTextChars: 1.5,
+      }),
+    ).rejects.toThrow("Expected a positive maxTextChars value, received 1.5");
+  });
+
+  it("rejects non-attachments and attachments over the configured image include cap", async () => {
     const harness = createHarness("hello");
     harness.addFolderEntry(attachmentPath, {
       id: attachmentId,
@@ -126,8 +187,13 @@ describe("RelayClient handle editing", () => {
     await expect(relay.readAttachment(notePath)).rejects.toThrow(
       "Relay path Notes/Test.md is a markdown resource, not an attachment",
     );
-    await expect(relay.readAttachment(attachmentPath, { maxBytes: 3 })).rejects.toThrow(
-      "Relay file is 6 bytes, which exceeds maxBytes 3",
+    await expect(
+      relay.readAttachment(attachmentPath, {
+        includeImageContent: true,
+        maxImageContentMB: 3 / 1024 / 1024,
+      }),
+    ).rejects.toThrow(
+      "Relay file is 6 bytes, which exceeds maximum included content size 3",
     );
   });
 
@@ -320,6 +386,8 @@ function createHarness(initialText: string) {
 
   let failNextUpdate = false;
   let failNoteAsUpdate = false;
+  let attachmentDownloadCount = 0;
+  let currentAttachmentBytes = attachmentBytes;
 
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -355,6 +423,7 @@ function createHarness(initialText: string) {
         file: payload.hash,
         contentType: payload.contentType,
         contentLength: payload.contentLength,
+        expiryTime: 2_000_000_000_000,
       });
     }
 
@@ -394,9 +463,10 @@ function createHarness(initialText: string) {
     }
 
     if (url === "https://download.test/logo.png") {
-      return binaryResponse(attachmentBytes, {
+      attachmentDownloadCount += 1;
+      return binaryResponse(currentAttachmentBytes, {
         "Content-Type": "image/png",
-        "Content-Length": String(attachmentBytes.byteLength),
+        "Content-Length": String(currentAttachmentBytes.byteLength),
       });
     }
 
@@ -420,6 +490,12 @@ function createHarness(initialText: string) {
     },
     createRelay(options: { liveWebSocket?: boolean } = {}) {
       return this.createRelayWithOptions(options);
+    },
+    getAttachmentDownloadCount() {
+      return attachmentDownloadCount;
+    },
+    setAttachmentBytes(bytes: Uint8Array) {
+      currentAttachmentBytes = bytes;
     },
     addFolderEntry(
       path: string,

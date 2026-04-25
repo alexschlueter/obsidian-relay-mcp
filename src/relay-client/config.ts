@@ -9,11 +9,21 @@ export interface RelayClientFileConfig {
   authUrl?: string;
   bearerToken?: string;
   authRecord?: Record<string, unknown>;
+  attachments?: RelayAttachmentContentConfig;
   relayId?: string;
   folderId?: string;
   provider?: string;
   tokenExpiresAt?: string;
   updatedAt?: string;
+}
+
+export interface RelayAttachmentContentConfig {
+  includeTextContent?: boolean;
+  includeImageContent?: boolean;
+  includeAudioContent?: boolean;
+  maxTextChars?: number;
+  maxImageContentMB?: number;
+  maxAudioContentMB?: number;
 }
 
 export interface RelayClientFileConfigResult {

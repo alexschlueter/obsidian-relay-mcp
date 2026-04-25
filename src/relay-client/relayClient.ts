@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { ClientToken, RelayAuthClient, RelayAuthClientOptions } from "./auth";
 import { applyCodexUpdatePatch } from "./codexPatch";
-import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig } from "./config";
+import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig, RelayAttachmentContentConfig } from "./config";
 import { LoadedTextDocument, RelayDocClient } from "./docClient";
 import { RelayFileClient } from "./fileClient";
 import { FolderEntry, FolderIndex, normalizeRelayPath, toS3Resource } from "./folderIndex";
@@ -20,6 +20,7 @@ import { S3RemoteFile, S3RemoteFolder } from "./s3rn";
 import { patchText as applyTextPatch, replaceText, TextMutationResult } from "./textPatch";
 
 export interface RelayClientConfig extends RelayAuthClientOptions {
+  attachments?: RelayAttachmentContentConfig;
   relayId?: string;
   folderId?: string;
   liveProvider?: LiveRelayProviderOptions;
@@ -82,21 +83,24 @@ export interface RelayListFilesResult {
 }
 
 export interface RelayReadAttachmentOptions {
-  maxBytes?: number;
+  includeTextContent?: boolean;
+  maxTextChars?: number;
+  includeImageContent?: boolean;
+  maxImageContentMB?: number;
+  includeAudioContent?: boolean;
+  maxAudioContentMB?: number;
 }
 
 export interface RelayReadAttachmentResult {
   ok: true;
-  relayId: string;
-  folderId: string;
-  path: string;
-  resourceId: string;
-  type: FolderEntry["type"];
+  url: string;
   contentType?: string;
-  contentLength: number;
+  contentLength?: number;
+  expiresAt?: string;
   hash: string;
-  synctime?: number;
-  dataBase64: string;
+  text?: string;
+  truncated?: true;
+  dataBase64?: string;
 }
 
 type RelayReadArgs =
@@ -125,6 +129,7 @@ export class RelayClient {
   readonly auth: RelayAuthClient;
   readonly docClient: RelayDocClient;
   readonly fileClient: RelayFileClient;
+  readonly attachmentContentConfig: Required<RelayAttachmentContentConfig>;
   readonly defaultRelayId?: string;
   readonly defaultFolderId?: string;
   private readonly liveProviderOptions: LiveRelayProviderOptions;
@@ -137,6 +142,7 @@ export class RelayClient {
     this.auth = new RelayAuthClient(config);
     this.docClient = new RelayDocClient({ fetch: config.fetch });
     this.fileClient = new RelayFileClient({ fetch: config.fetch });
+    this.attachmentContentConfig = normalizeAttachmentContentConfig(config.attachments);
     this.defaultRelayId = config.relayId;
     this.defaultFolderId = config.folderId;
     this.liveProviderOptions = config.liveProvider ?? {};
@@ -165,6 +171,7 @@ export class RelayClient {
       authUrl: overrides.authUrl ?? env.RELAY_AUTH_URL ?? fileConfig?.authUrl,
       bearerToken,
       configPath: overrides.configPath ?? loaded.path,
+      attachments: overrides.attachments ?? fileConfig?.attachments,
       relayId: overrides.relayId ?? env.RELAY_ID ?? fileConfig?.relayId,
       folderId: overrides.folderId ?? env.RELAY_FOLDER_ID ?? fileConfig?.folderId,
     });
@@ -247,21 +254,36 @@ export class RelayClient {
 
     const requestedContentType = entry.mimetype ?? "application/octet-stream";
     const fileToken = await this.auth.issueFileToken(resource, entry.hash, requestedContentType, 0);
-    const downloaded = await this.fileClient.downloadFile(fileToken, options);
-    const contentType = entry.mimetype ?? downloaded.contentType ?? fileToken.contentType;
+    const downloadUrl = await this.fileClient.getDownloadUrl(fileToken);
+    const contentType = entry.mimetype ?? fileToken.contentType ?? requestedContentType;
+    const includeKind = attachmentIncludeKind(entry.path, contentType, options);
+    const maxIncludedBytes = includeKind === "image"
+      ? megabytesToBytes(options.maxImageContentMB)
+      : includeKind === "audio"
+        ? megabytesToBytes(options.maxAudioContentMB)
+        : undefined;
+    const downloaded = includeKind === undefined
+      ? undefined
+      : await this.fileClient.downloadFileFromUrl(downloadUrl, {
+          maxContentBytes: maxIncludedBytes,
+        });
+    const bytes = downloaded?.bytes;
+    const textContent = includeKind === "text" && bytes
+      ? decodeAttachmentText(bytes, options.maxTextChars)
+      : undefined;
 
     return {
       ok: true,
-      relayId: address.relayId,
-      folderId: address.folderId,
-      path: entry.path,
-      resourceId: entry.id,
-      type: entry.type,
+      url: downloadUrl.downloadUrl,
       ...(contentType === undefined ? {} : { contentType }),
-      contentLength: downloaded.bytes.byteLength,
+      ...(bytes === undefined ? {} : { contentLength: bytes.byteLength }),
+      ...(downloadUrl.expiresAt === undefined ? {} : { expiresAt: downloadUrl.expiresAt }),
       hash: entry.hash,
-      ...(entry.synctime === undefined ? {} : { synctime: entry.synctime }),
-      dataBase64: Buffer.from(downloaded.bytes).toString("base64"),
+      ...(textContent === undefined ? {} : { text: textContent.text }),
+      ...(textContent?.truncated ? { truncated: true as const } : {}),
+      ...(includeKind === "image" || includeKind === "audio"
+        ? { dataBase64: Buffer.from(bytes!).toString("base64") }
+        : {}),
     };
   }
 
@@ -1101,15 +1123,53 @@ function assertNoDeprecatedTtlMs(rawOptions: RelayReadTextOptions): void {
 function parseReadAttachmentOptions(
   rawOptions: RelayReadAttachmentOptions | undefined,
 ): RelayReadAttachmentOptions {
-  if (rawOptions?.maxBytes === undefined) {
+  return {
+    ...parseOptionalBooleanOption("includeTextContent", rawOptions?.includeTextContent),
+    ...parseOptionalPositiveIntegerOption("maxTextChars", rawOptions?.maxTextChars),
+    ...parseOptionalBooleanOption("includeImageContent", rawOptions?.includeImageContent),
+    ...parseOptionalPositiveNumberOption("maxImageContentMB", rawOptions?.maxImageContentMB),
+    ...parseOptionalBooleanOption("includeAudioContent", rawOptions?.includeAudioContent),
+    ...parseOptionalPositiveNumberOption("maxAudioContentMB", rawOptions?.maxAudioContentMB),
+  };
+}
+
+function parseOptionalBooleanOption(
+  field: string,
+  value: boolean | undefined,
+): Record<string, boolean> {
+  if (value === undefined) {
     return {};
   }
-  if (!Number.isFinite(rawOptions.maxBytes) || rawOptions.maxBytes < 0) {
-    throw new Error(`Expected a non-negative maxBytes value, received ${rawOptions.maxBytes}`);
+  if (typeof value !== "boolean") {
+    throw new Error(`Expected a boolean ${field} value, received ${String(value)}`);
   }
-  return {
-    maxBytes: Math.trunc(rawOptions.maxBytes),
-  };
+  return { [field]: value };
+}
+
+function parseOptionalPositiveIntegerOption(
+  field: string,
+  value: number | undefined,
+): Record<string, number> {
+  if (value === undefined) {
+    return {};
+  }
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Expected a positive ${field} value, received ${value}`);
+  }
+  return { [field]: value };
+}
+
+function parseOptionalPositiveNumberOption(
+  field: string,
+  value: number | undefined,
+): Record<string, number> {
+  if (value === undefined) {
+    return {};
+  }
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Expected a positive ${field} value, received ${value}`);
+  }
+  return { [field]: value };
 }
 
 type CursorEdge = "start" | "end";
@@ -1255,6 +1315,132 @@ function listedFileKindFromEntry(entry: FolderEntry): RelayListedFileKind {
   return "attachment";
 }
 
+type AttachmentIncludeKind = "text" | "image" | "audio";
+
+function attachmentIncludeKind(
+  filePath: string,
+  contentType: string | undefined,
+  options: RelayReadAttachmentOptions,
+): AttachmentIncludeKind | undefined {
+  if (options.includeTextContent === true && isTextAttachment(filePath, contentType)) {
+    return "text";
+  }
+  if (options.includeImageContent === true && contentType?.toLocaleLowerCase().startsWith("image/")) {
+    return "image";
+  }
+  if (options.includeAudioContent === true && contentType?.toLocaleLowerCase().startsWith("audio/")) {
+    return "audio";
+  }
+  return undefined;
+}
+
+function isTextAttachment(filePath: string, contentType: string | undefined): boolean {
+  const normalizedContentType = contentType?.split(";")[0]?.trim().toLocaleLowerCase();
+  if (normalizedContentType?.startsWith("text/")) {
+    return true;
+  }
+  if (
+    normalizedContentType &&
+    TEXT_ATTACHMENT_MIME_TYPES.has(normalizedContentType)
+  ) {
+    return true;
+  }
+  const extension = filePath.split(".").pop()?.toLocaleLowerCase();
+  return extension !== undefined && TEXT_ATTACHMENT_EXTENSIONS.has(extension);
+}
+
+function decodeAttachmentText(
+  bytes: Uint8Array,
+  maxTextChars: number | undefined,
+): { text: string; truncated?: true } {
+  const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  if (maxTextChars === undefined || decoded.length <= maxTextChars) {
+    return { text: decoded };
+  }
+  return {
+    text: decoded.slice(0, maxTextChars),
+    truncated: true,
+  };
+}
+
+function megabytesToBytes(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return Math.floor(value * 1024 * 1024);
+}
+
+function normalizeAttachmentContentConfig(
+  config: RelayAttachmentContentConfig | undefined,
+): Required<RelayAttachmentContentConfig> {
+  return {
+    includeTextContent: config?.includeTextContent === true,
+    includeImageContent: config?.includeImageContent === true,
+    includeAudioContent: config?.includeAudioContent === true,
+    maxTextChars: normalizePositiveInteger(config?.maxTextChars, DEFAULT_ATTACHMENT_MAX_TEXT_CHARS),
+    maxImageContentMB: normalizePositiveNumber(config?.maxImageContentMB, DEFAULT_ATTACHMENT_MAX_IMAGE_CONTENT_MB),
+    maxAudioContentMB: normalizePositiveNumber(config?.maxAudioContentMB, DEFAULT_ATTACHMENT_MAX_AUDIO_CONTENT_MB),
+  };
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`Expected a positive integer attachment config value, received ${value}`);
+  }
+  return value;
+}
+
+function normalizePositiveNumber(value: number | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Expected a positive attachment config value, received ${value}`);
+  }
+  return value;
+}
+
+const TEXT_ATTACHMENT_MIME_TYPES = new Set([
+  "application/javascript",
+  "application/json",
+  "application/ld+json",
+  "application/toml",
+  "application/typescript",
+  "application/x-ndjson",
+  "application/x-yaml",
+  "application/xml",
+  "application/yaml",
+  "image/svg+xml",
+]);
+
+const TEXT_ATTACHMENT_EXTENSIONS = new Set([
+  "cjs",
+  "conf",
+  "csv",
+  "css",
+  "html",
+  "ini",
+  "js",
+  "json",
+  "jsonl",
+  "log",
+  "md",
+  "mjs",
+  "svg",
+  "toml",
+  "ts",
+  "txt",
+  "xml",
+  "yaml",
+  "yml",
+]);
+
+const DEFAULT_ATTACHMENT_MAX_TEXT_CHARS = 20_000;
+const DEFAULT_ATTACHMENT_MAX_IMAGE_CONTENT_MB = 5;
+const DEFAULT_ATTACHMENT_MAX_AUDIO_CONTENT_MB = 10;
 const DEFAULT_LIST_FILES_MAX_RESULTS = 50;
 const MAX_LIST_FILES_MAX_RESULTS = 200;
 const RELAY_HANDLE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";

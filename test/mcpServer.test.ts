@@ -91,28 +91,91 @@ describe("Relay MCP server", () => {
         name: "read_attachment",
         arguments: {
           path: "Images/logo.png",
-          maxBytes: 4096,
         },
       });
 
       expect(result.structuredContent).toEqual({
         ok: true,
-        path: "Images/logo.png",
-        resourceId: "77777777-7777-7777-7777-777777777777",
-        type: "image",
+        url: "https://download.test/logo.png",
+        contentType: "image/png",
+        hash: "abcdef",
+      });
+      expect(fakeClient.calls).toContainEqual({
+        method: "readAttachment",
+        args: ["Images/logo.png"],
+      });
+    });
+  });
+
+  it("returns configured image attachment content as a second MCP content item", async () => {
+    const fakeClient = createFakeRelayClient({
+      includeImageContent: true,
+      maxImageContentMB: 1,
+    });
+
+    await withMcpClient(fakeClient, async ({ client }) => {
+      const result = await client.callTool({
+        name: "read_attachment",
+        arguments: {
+          path: "Images/logo.png",
+          maxImageContentMB: 0.5,
+        },
+      });
+
+      expect(result.structuredContent).toEqual({
+        ok: true,
+        url: "https://download.test/logo.png",
         contentType: "image/png",
         contentLength: 3,
         hash: "abcdef",
-        dataBase64: "UE5H",
+      });
+      expect(result.content).toContainEqual({
+        type: "image",
+        data: "UE5H",
+        mimeType: "image/png",
       });
       expect(fakeClient.calls).toContainEqual({
         method: "readAttachment",
         args: [
           "Images/logo.png",
           {
-            maxBytes: 4096,
+            includeImageContent: true,
+            maxImageContentMB: 0.5,
           },
         ],
+      });
+    });
+  });
+
+  it("does not include configured image attachment content when the tool opts out", async () => {
+    const fakeClient = createFakeRelayClient({
+      includeImageContent: true,
+      maxImageContentMB: 1,
+    });
+
+    await withMcpClient(fakeClient, async ({ client }) => {
+      const result = await client.callTool({
+        name: "read_attachment",
+        arguments: {
+          path: "Images/logo.png",
+          includeImageContent: false,
+        },
+      });
+
+      expect(result.structuredContent).toEqual({
+        ok: true,
+        url: "https://download.test/logo.png",
+        contentType: "image/png",
+        hash: "abcdef",
+      });
+      expect(result.content).not.toContainEqual({
+        type: "image",
+        data: "UE5H",
+        mimeType: "image/png",
+      });
+      expect(fakeClient.calls).toContainEqual({
+        method: "readAttachment",
+        args: ["Images/logo.png"],
       });
     });
   });
@@ -281,6 +344,14 @@ interface FakeCall {
 }
 
 interface FakeRelayClient {
+  attachmentContentConfig: {
+    includeTextContent: boolean;
+    includeImageContent: boolean;
+    includeAudioContent: boolean;
+    maxTextChars: number;
+    maxImageContentMB: number;
+    maxAudioContentMB: number;
+  };
   calls: FakeCall[];
   failRead: boolean;
   listFiles(options?: unknown): Promise<unknown>;
@@ -303,9 +374,20 @@ interface FakeRelayClient {
   deleteSelection(sessionId: string): Promise<unknown>;
 }
 
-function createFakeRelayClient(): FakeRelayClient {
+function createFakeRelayClient(
+  attachmentContentConfig: Partial<FakeRelayClient["attachmentContentConfig"]> = {},
+): FakeRelayClient {
   const calls: FakeCall[] = [];
   return {
+    attachmentContentConfig: {
+      includeTextContent: false,
+      includeImageContent: false,
+      includeAudioContent: false,
+      maxTextChars: 20_000,
+      maxImageContentMB: 5,
+      maxAudioContentMB: 10,
+      ...attachmentContentConfig,
+    },
     calls,
     failRead: false,
     async listFiles(options) {
@@ -344,13 +426,12 @@ function createFakeRelayClient(): FakeRelayClient {
       calls.push({ method: "readAttachment", args: options === undefined ? [path] : [path, options] });
       return {
         ok: true,
-        path,
-        resourceId: "77777777-7777-7777-7777-777777777777",
-        type: "image",
+        url: "https://download.test/logo.png",
         contentType: "image/png",
-        contentLength: 3,
+        ...(typeof options === "object" && options !== null && "includeImageContent" in options
+          ? { contentLength: 3, dataBase64: "UE5H" }
+          : {}),
         hash: "abcdef",
-        dataBase64: "UE5H",
       };
     },
     async patchText(...args) {

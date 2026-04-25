@@ -29,6 +29,10 @@ describe("relay-client config", () => {
 
     saveRelayClientFileConfig(
       {
+        attachments: {
+          includeImageContent: true,
+          maxImageContentMB: 2,
+        },
         bearerToken: "token-123",
         relayId: "relay-guid",
       },
@@ -38,6 +42,10 @@ describe("relay-client config", () => {
     const loaded = loadRelayClientFileConfig({ env });
 
     expect(loaded.config).toMatchObject({
+      attachments: {
+        includeImageContent: true,
+        maxImageContentMB: 2,
+      },
       bearerToken: "token-123",
       relayId: "relay-guid",
     });
@@ -97,5 +105,29 @@ describe("relay-client config", () => {
     expect(requests[0]?.headers).toMatchObject({
       Authorization: "Bearer saved-token",
     });
+  });
+
+  it("rejects fractional attachment text character limits from saved config", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-relay-config-"));
+    tempDirs.push(tempDir);
+
+    const env = {
+      ...process.env,
+      RELAY_CLIENT_CONFIG: path.join(tempDir, "relay-config.json"),
+    };
+
+    saveRelayClientFileConfig(
+      {
+        bearerToken: "token-123",
+        attachments: {
+          maxTextChars: 1.5,
+        },
+      },
+      { env },
+    );
+
+    expect(() => RelayClient.fromEnv(env)).toThrow(
+      "Expected a positive integer attachment config value, received 1.5",
+    );
   });
 });
