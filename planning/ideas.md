@@ -1,0 +1,6 @@
+- more obsidian types: canvas, bases (=table / db of notes)
+- attachments
+- file properties
+- query codex to scan relay code for more features we could add
+- self host relay
+- clean up, publish to gh, maybe post relay discord / reddit
