@@ -109,9 +109,14 @@ describeLive("Relay live integration", () => {
         expect(withMarker).toContain(markerId);
         console.log(`[live-relay] marker appended to ${notePath}`);
       } finally {
-        const cleanedText = await cleanupSmokeTestMarkers(
+        const cleanupRead = await relay.readText(notePath);
+        if (cleanupRead.text.includes(markerId)) {
+          await relay.writeText(notePath, originalText);
+        }
+        const cleanedText = await waitForNoteState(
           relay,
           notePath,
+          (text) => text === originalText,
           timeoutMs,
           pollIntervalMs,
         );
@@ -132,6 +137,7 @@ describeLive("Relay live integration", () => {
       const relay = RelayClient.fromEnv();
       const markerId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const marker = buildLiveSessionMarker(markerId);
+      const original = await relay.readText(notePath);
       let sessionId: string | undefined;
 
       try {
@@ -291,16 +297,12 @@ describeLive("Relay live integration", () => {
         }
 
         const cleanupRead = await relay.readText(notePath);
-        const cleanedText = removeLiveSessionMarkerBlock(cleanupRead.text, markerId);
-        if (cleanedText !== cleanupRead.text) {
-          await relay.applyPatch(
-            cleanupRead.handle,
-            buildReplacePatch(notePath, cleanupRead.text, cleanedText),
-          );
+        if (cleanupRead.text.includes(markerId)) {
+          await relay.writeText(notePath, original.text);
           await waitForNoteState(
             relay,
             notePath,
-            (text) => !text.includes(markerId),
+            (text) => text === original.text,
             timeoutMs,
             pollIntervalMs,
           );
@@ -368,32 +370,6 @@ function buildLiveSessionMarker(markerId: string): {
     tokenB,
     tokenC,
   };
-}
-
-function removeLiveSessionMarkerBlock(text: string, markerId: string): string {
-  const openingComment = `<!-- mcp-relay live session test ${markerId} -->`;
-  const closingComment = `<!-- /mcp-relay live session test ${markerId} -->`;
-  const start = text.indexOf(openingComment);
-  if (start < 0) {
-    return text;
-  }
-
-  const closeStart = text.indexOf(closingComment, start);
-  if (closeStart < 0) {
-    return text;
-  }
-
-  let removeStart = start;
-  while (removeStart > 0 && text[removeStart - 1] === "\n") {
-    removeStart -= 1;
-  }
-
-  let removeEnd = closeStart + closingComment.length;
-  while (removeEnd < text.length && text[removeEnd] === "\n") {
-    removeEnd += 1;
-  }
-
-  return `${text.slice(0, removeStart)}${text.slice(removeEnd)}`;
 }
 
 function appendMarker(current: string, markerBlock: string): string {

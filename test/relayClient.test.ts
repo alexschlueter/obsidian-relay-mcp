@@ -108,6 +108,7 @@ describe("RelayClient handle editing", () => {
     const result = await relay.applyPatch(
       first.patchHandle,
       buildReplacePatch(notePath, first.text, "hello brave new world\n"),
+      { returnResult: true },
     );
 
     expect(result).toEqual({
@@ -130,6 +131,7 @@ describe("RelayClient handle editing", () => {
     const result = await relay.patchText(
       read.handle,
       buildReplacePatch(notePath, read.text, "HELLO"),
+      { returnResult: true },
     );
 
     expect(result).toEqual({
