@@ -16,12 +16,10 @@ export interface RelayFileDownloadUrl {
 }
 
 export interface DownloadedRelayFile {
-  fileToken: FileToken;
-  baseUrl: string;
-  downloadUrl: string;
-  expiresAt?: string;
-  bytes: Uint8Array;
+  bytes?: Uint8Array;
   contentType?: string;
+  contentLength?: number;
+  contentLimitExceeded?: true;
 }
 
 export class RelayFileClient {
@@ -87,33 +85,33 @@ export class RelayFileClient {
       );
     }
 
+    const contentType = downloadResponse.headers.get("content-type") ?? undefined;
     const expectedLength = parseContentLength(downloadResponse.headers.get("content-length"));
     if (
       options.maxContentBytes !== undefined &&
       expectedLength !== undefined &&
       expectedLength > options.maxContentBytes
     ) {
-      throw new Error(
-        `Relay file is ${expectedLength} bytes, which exceeds maximum included content size ${options.maxContentBytes}`,
-      );
+      return {
+        contentLength: expectedLength,
+        contentType,
+        contentLimitExceeded: true,
+      };
     }
 
     const bytes = new Uint8Array(await downloadResponse.arrayBuffer());
     if (options.maxContentBytes !== undefined && bytes.byteLength > options.maxContentBytes) {
-      throw new Error(
-        `Relay file is ${bytes.byteLength} bytes, which exceeds maximum included content size ${options.maxContentBytes}`,
-      );
+      return {
+        contentLength: bytes.byteLength,
+        contentType,
+        contentLimitExceeded: true,
+      };
     }
 
     return {
-      fileToken: downloadUrl.fileToken,
-      baseUrl: downloadUrl.baseUrl,
-      downloadUrl: downloadUrl.downloadUrl,
-      ...(downloadUrl.expiresAt === undefined ? {} : { expiresAt: downloadUrl.expiresAt }),
       bytes,
-      ...(downloadResponse.headers.get("content-type")
-        ? { contentType: downloadResponse.headers.get("content-type")! }
-        : {}),
+      contentLength: bytes.byteLength,
+      contentType,
     };
   }
 

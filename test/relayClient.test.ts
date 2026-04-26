@@ -135,7 +135,7 @@ describe("RelayClient handle editing", () => {
     expect(harness.getAttachmentDownloadCount()).toBe(1);
   });
 
-  it("includes truncated text attachment content in the JSON result when requested", async () => {
+  it("marks text attachment contentLimitExceeded in the JSON result when requested", async () => {
     const harness = createHarness("hello");
     harness.setAttachmentBytes(Buffer.from("abcdef", "utf8"));
     harness.addFolderEntry(attachmentPath, {
@@ -158,8 +158,8 @@ describe("RelayClient handle editing", () => {
       contentLength: 6,
       expiresAt: "2033-05-18T03:33:20.000Z",
       hash: attachmentHash,
+      contentLimitExceeded: true,
       text: "abc",
-      truncated: true,
     });
   });
 
@@ -174,7 +174,7 @@ describe("RelayClient handle editing", () => {
     ).rejects.toThrow("Expected a positive maxTextChars value, received 1.5");
   });
 
-  it("rejects non-attachments and attachments over the configured image include cap", async () => {
+  it("marks non-attachments and attachments over the configured image include cap", async () => {
     const harness = createHarness("hello");
     harness.addFolderEntry(attachmentPath, {
       id: attachmentId,
@@ -187,14 +187,19 @@ describe("RelayClient handle editing", () => {
     await expect(relay.readAttachment(notePath)).rejects.toThrow(
       "Relay path Notes/Test.md is a markdown resource, not an attachment",
     );
-    await expect(
-      relay.readAttachment(attachmentPath, {
-        includeImageContent: true,
-        maxImageContentMB: 3 / 1024 / 1024,
-      }),
-    ).rejects.toThrow(
-      "Relay file is 6 bytes, which exceeds maximum included content size 3",
-    );
+    const attachment = await relay.readAttachment(attachmentPath, {
+      includeImageContent: true,
+      maxImageContentMB: 3 / 1024 / 1024,
+    });
+    expect(attachment).toMatchObject({
+      ok: true,
+      url: "https://download.test/logo.png",
+      contentType: "image/png",
+      contentLength: attachmentBytes.byteLength,
+      contentLimitExceeded: true,
+      hash: attachmentHash,
+    });
+    expect(attachment.dataBase64).toBeUndefined();
   });
 
   it("returns a fresh handle for each read and applies update-file patches", async () => {

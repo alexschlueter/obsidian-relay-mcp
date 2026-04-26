@@ -1,9 +1,13 @@
 ---
-name: obsidian
-description: Use Obsidian MCP tools for reading, patching, and live collaborative Markdown editing.
+name: obsidian-relay-mcp
+description: This skill connects directly to a system3 Relay server syncing Obsidian files, without requiring a running Obsidian instance. It uses MCP tools for reading notes and attachments, patching Markdown, and live collaborative editing of agents and users.
 ---
 
-Use this skill when working with Obsidian notes through the MCP tools.
+[Relay](https://relay.md/) is a "multiplayer" plugin and syncing backend for Obsidian, which uses Conflict-free Replicated Data Types for smart conflict resolution during concurrent editing. [Obsidian-relay-mcp](https://github.com/alexschlueter/obsidian-relay-mcp) combines
+- a client that connects directly to a Relay server without requiring a running Obsidian instance with
+- an MCP server that exposes tools for agents to interact with the Obsidian files.
+
+Use this skill when working with Obsidian notes and attachments through the MCP tools.
 
 ## Choose The Editing Mode
 
@@ -92,7 +96,71 @@ Live collaboration rules:
 - If a match is stale, search again before editing.
 - If a session is expired or closed, open a new session.
 
-## Common Workflows
+## Attachments
+
+Use `list_files` to discover attachments. Attachment entries have
+`kind: "attachment"` and are read with `read_attachment`.
+
+Basic workflow:
+
+1. Read the note with `read_text` if you need to find embedded links such as
+   `![[image.png]]` or `[report](Files/report.pdf)`.
+2. Resolve the vault-relative attachment path. Use `list_files` if the link is
+   ambiguous or relative to a folder.
+3. Call `read_attachment { path }`.
+
+`read_attachment` always returns a first text content item containing JSON:
+
+```json
+{
+  "ok": true,
+  "url": "https://...",
+  "contentType": "image/png",
+  "contentLength": 12345,
+  "expiresAt": "2026-04-26T12:00:00.000Z",
+  "hash": "sha256...",
+  "text": "decoded text, if requested and text-like",
+  "contentLimitExceeded": true
+}
+```
+
+Field notes:
+
+- `url` is the direct Relay download URL. It may be temporary, so download the file if you need it later.
+- `contentLimitExceeded: true` means the requested inline content was shortened or dropped because it hit the configured limit.
+- `text` is included only for text-like attachments when text inclusion is enabled.
+
+In addition to the JSON, `read_attachment` may return inline image or audio content.
+Inline content options are controlled first by the MCP server config. Tool
+arguments for a content type are only available when that type is enabled in the
+server config. When enabled, inline content is included by default; pass the
+matching `include...Content: false` argument to opt out for a call.
+
+Available tool arguments, when exposed by the server:
+
+- `includeTextContent`
+- `maxTextChars`
+- `includeImageContent`
+- `maxImageContentMB`
+- `includeAudioContent`
+- `maxAudioContentMB`
+
+Relevant `.relay-client.json` server config example:
+
+```json
+{
+  "attachments": {
+    "includeTextContent": true,
+    "maxTextChars": 2000,
+    "includeImageContent": true,
+    "maxImageContentMB": 2,
+    "includeAudioContent": false,
+    "maxAudioContentMB": 2
+  }
+}
+```
+
+## More Common Workflows
 
 Find and read a note:
 

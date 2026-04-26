@@ -101,12 +101,17 @@ describeLive("Relay live integration", () => {
       expect(boundedRead.dataBase64).toBe(attachment.dataBase64);
 
       if (attachment.contentLength! > 0) {
-        await expect(
-          relay.readAttachment(attachmentPath, {
-            includeImageContent: true,
-            maxImageContentMB: (attachment.contentLength! - 1) / 1024 / 1024,
-          }),
-        ).rejects.toThrow("exceeds maximum included content size");
+        const limitedRead = await relay.readAttachment(attachmentPath, {
+          includeImageContent: true,
+          maxImageContentMB: (attachment.contentLength! - 1) / 1024 / 1024,
+        });
+        expect(limitedRead).toMatchObject({
+          ok: true,
+          contentLimitExceeded: true,
+          contentType: attachment.contentType,
+          hash: entryHash,
+        });
+        expect(limitedRead.dataBase64).toBeUndefined();
       }
 
       console.log(

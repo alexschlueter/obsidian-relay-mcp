@@ -98,8 +98,8 @@ export interface RelayReadAttachmentResult {
   contentLength?: number;
   expiresAt?: string;
   hash: string;
+  contentLimitExceeded?: true;
   text?: string;
-  truncated?: true;
   dataBase64?: string;
 }
 
@@ -271,17 +271,21 @@ export class RelayClient {
     const textContent = includeKind === "text" && bytes
       ? decodeAttachmentText(bytes, options.maxTextChars)
       : undefined;
+    const contentLimitExceeded = downloaded?.contentLimitExceeded === true
+      || textContent?.contentLimitExceeded === true;
 
     return {
       ok: true,
       url: downloadUrl.downloadUrl,
       ...(contentType === undefined ? {} : { contentType }),
-      ...(bytes === undefined ? {} : { contentLength: bytes.byteLength }),
+      ...(downloaded?.contentLength === undefined
+        ? (bytes === undefined ? {} : { contentLength: bytes.byteLength })
+        : { contentLength: downloaded.contentLength }),
       ...(downloadUrl.expiresAt === undefined ? {} : { expiresAt: downloadUrl.expiresAt }),
       hash: entry.hash,
+      ...(contentLimitExceeded ? { contentLimitExceeded: true as const } : {}),
       ...(textContent === undefined ? {} : { text: textContent.text }),
-      ...(textContent?.truncated ? { truncated: true as const } : {}),
-      ...(includeKind === "image" || includeKind === "audio"
+      ...(bytes !== undefined && (includeKind === "image" || includeKind === "audio")
         ? { dataBase64: Buffer.from(bytes!).toString("base64") }
         : {}),
     };
@@ -1352,14 +1356,14 @@ function isTextAttachment(filePath: string, contentType: string | undefined): bo
 function decodeAttachmentText(
   bytes: Uint8Array,
   maxTextChars: number | undefined,
-): { text: string; truncated?: true } {
+): { text: string; contentLimitExceeded?: true } {
   const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
   if (maxTextChars === undefined || decoded.length <= maxTextChars) {
     return { text: decoded };
   }
   return {
     text: decoded.slice(0, maxTextChars),
-    truncated: true,
+    contentLimitExceeded: true,
   };
 }
 
@@ -1438,9 +1442,9 @@ const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "yml",
 ]);
 
-const DEFAULT_ATTACHMENT_MAX_TEXT_CHARS = 20_000;
-const DEFAULT_ATTACHMENT_MAX_IMAGE_CONTENT_MB = 5;
-const DEFAULT_ATTACHMENT_MAX_AUDIO_CONTENT_MB = 10;
+const DEFAULT_ATTACHMENT_MAX_TEXT_CHARS = 2000;
+const DEFAULT_ATTACHMENT_MAX_IMAGE_CONTENT_MB = 2;
+const DEFAULT_ATTACHMENT_MAX_AUDIO_CONTENT_MB = 2;
 const DEFAULT_LIST_FILES_MAX_RESULTS = 50;
 const MAX_LIST_FILES_MAX_RESULTS = 200;
 const RELAY_HANDLE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
