@@ -251,5 +251,7 @@ Non-binding summary:
 ## Acknowledgements
 
 Relay is made by [system3](https://system3.md/).
+
 The live editing tool interface is inspired by [collaborative-ai-editor](https://github.com/electric-sql/collaborative-ai-editor).
+
 Most of this was written by GPT 5.4 and 5.5.
