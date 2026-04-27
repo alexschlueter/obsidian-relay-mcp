@@ -3,12 +3,13 @@
 import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig, saveRelayClientFileConfig } from "../relay-client/config";
 import { buildRelayBearerTokenExports, RelayLoginClient } from "../relay-client/login";
 
-async function main(): Promise<void> {
+export async function runRelayGithubLogin(argv: string[] = process.argv): Promise<void> {
   const loadedConfig = loadRelayClientFileConfig();
   const apiUrl = process.env.RELAY_API_URL ?? loadedConfig.config?.apiUrl ?? DEFAULT_RELAY_API_URL;
   const authUrl = process.env.RELAY_AUTH_URL ?? loadedConfig.config?.authUrl;
   const timeoutMs = parsePositiveInt(process.env.RELAY_LOGIN_TIMEOUT_MS, 120_000);
   const pollIntervalMs = parsePositiveInt(process.env.RELAY_LOGIN_POLL_MS, 1_000);
+  const printEnv = argv.includes("--print-env");
 
   const loginClient = new RelayLoginClient({
     apiUrl,
@@ -45,17 +46,21 @@ async function main(): Promise<void> {
   if (result.tokenExpiresAt) {
     console.log(`[relay-login] Token expires at ${result.tokenExpiresAt}`);
   }
-  console.log("[relay-login] Export these values into your shell:");
-  console.log("");
-  console.log(
-    buildRelayBearerTokenExports({
-      apiUrl,
-      authUrl: result.authUrl,
-      bearerToken: result.token,
-    }),
-  );
-  console.log("");
-  console.log("[relay-login] relay-client will load the saved config automatically on the next run.");
+  if (printEnv) {
+    console.log("[relay-login] Export these values into your shell:");
+    console.log("");
+    console.log(
+      buildRelayBearerTokenExports({
+        apiUrl,
+        authUrl: result.authUrl,
+        bearerToken: result.token,
+      }),
+    );
+    console.log("");
+  } else {
+    console.log("[relay-login] Bearer token saved. Re-run with --print-env only if you need shell export lines.");
+  }
+  console.log("[relay-login] obsidian-relay-mcp will load the saved config automatically on the next run.");
   console.log("");
 }
 
@@ -79,8 +84,10 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`[relay-login] ${message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  runRelayGithubLogin().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[relay-login] ${message}`);
+    process.exitCode = 1;
+  });
+}

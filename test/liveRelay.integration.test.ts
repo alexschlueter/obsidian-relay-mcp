@@ -17,7 +17,7 @@ const attachmentMaxBytes = parseInteger(process.env.RELAY_LIVE_TEST_ATTACHMENT_M
 const timeoutMs = parseInteger(process.env.RELAY_LIVE_TEST_TIMEOUT_MS, 20_000);
 const editSessionTtlSeconds = Math.ceil(timeoutMs / 1000);
 const pollIntervalMs = parseInteger(process.env.RELAY_LIVE_TEST_POLL_MS, 500);
-const liveIntegrationAgentName = "mcp-relay live integration";
+const liveIntegrationAgentName = "obsidian-relay-mcp live integration";
 
 const describeLive = liveBaseEnabled ? describe : describe.skip;
 
@@ -137,7 +137,7 @@ describeLive("Relay live integration", () => {
         const cursors = await relay.listActiveCursors(sessionId);
         expect(cursors).toContainEqual({
           clientId: expect.any(Number),
-          userId: `mcp-relay:${sessionId}`,
+          userId: `obsidian-relay-mcp:${sessionId}`,
           userName: liveIntegrationAgentName,
           hasSelection: false,
         });
@@ -434,13 +434,13 @@ function buildLiveSessionMarker(markerId: string): {
   tokenB: string;
   tokenC: string;
 } {
-  const openingComment = `<!-- mcp-relay live session test ${markerId} -->`;
-  const closingComment = `<!-- /mcp-relay live session test ${markerId} -->`;
-  const headingText = `mcp-relay live heading ${markerId}`;
+  const openingComment = `<!-- obsidian-relay-mcp live session test ${markerId} -->`;
+  const closingComment = `<!-- /obsidian-relay-mcp live session test ${markerId} -->`;
+  const headingText = `obsidian-relay-mcp live heading ${markerId}`;
   const headingLine = `# ${headingText}`;
-  const tokenA = `mcp-relay-token-a-${markerId}`;
-  const tokenB = `mcp-relay-token-b-${markerId}`;
-  const tokenC = `mcp-relay-token-c-${markerId}`;
+  const tokenA = `obsidian-relay-mcp-token-a-${markerId}`;
+  const tokenB = `obsidian-relay-mcp-token-b-${markerId}`;
+  const tokenC = `obsidian-relay-mcp-token-c-${markerId}`;
   const insertedBlock = [
     "",
     "",

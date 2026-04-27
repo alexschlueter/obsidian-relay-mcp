@@ -1,0 +1,5 @@
+- test readme, especially install + openclaw install
+- test attachments + inline content with agent
+- explain codex patch format (to agents and maybe human). current explanation not enough / wrong? 3 lines context
+- install instructions in SKILL.md (cf other clawhub skills)
+- more login options other than github

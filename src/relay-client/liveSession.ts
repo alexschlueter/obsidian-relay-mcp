@@ -417,7 +417,7 @@ export class LiveEditSession {
 
   private setAgentAwareness(): void {
     this.awareness.setLocalStateField("user", {
-      id: `mcp-relay:${this.sessionId}`,
+      id: `obsidian-relay-mcp:${this.sessionId}`,
       name: this.agentName,
       color: this.agentColor.color,
       colorLight: this.agentColor.light,

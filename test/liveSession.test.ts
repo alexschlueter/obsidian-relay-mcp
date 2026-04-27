@@ -82,14 +82,14 @@ describe("LiveEditSession markdown tools", () => {
     expect(session.listActiveCursors()).toEqual([
       {
         clientId: session.ydoc.clientID,
-        userId: "mcp-relay:00000",
+        userId: "obsidian-relay-mcp:00000",
         userName: "Test Agent",
         hasSelection: false,
       },
     ]);
     expect(session.awareness.getLocalState()).toMatchObject({
       user: {
-        id: "mcp-relay:00000",
+        id: "obsidian-relay-mcp:00000",
         name: "Test Agent",
         color: expect.stringMatching(/^#[0-9a-f]{6}$/),
         colorLight: expect.stringMatching(/^#[0-9a-f]{8}$/),

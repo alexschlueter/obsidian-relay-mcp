@@ -1,9 +1,9 @@
 ---
 name: obsidian-relay-mcp
-description: This skill connects directly to a system3 Relay server syncing Obsidian files, without requiring a running Obsidian instance. It uses MCP tools for reading notes and attachments, patching Markdown, and live collaborative editing of agents and users.
+description: Use an MCP server to work with Obsidian notes that sync through system3's Relay. It talks to Relay directly, so an agent can read notes, patch Markdown, inspect attachments, and collaborate in live edit sessions without requiring a running Obsidian desktop instance.
 ---
 
-[Relay](https://relay.md/) is a "multiplayer" plugin and syncing backend for Obsidian, which uses Conflict-free Replicated Data Types for smart conflict resolution during concurrent editing. [Obsidian-relay-mcp](https://github.com/alexschlueter/obsidian-relay-mcp) combines
+[Relay](https://relay.md/) is a "multiplayer" plugin and syncing backend for Obsidian, which uses Conflict-free Replicated Data Types for smart conflict resolution during concurrent editing. [obsidian-relay-mcp](https://github.com/alexschlueter/obsidian-relay-mcp) combines
 - a client that connects directly to a Relay server without requiring a running Obsidian instance with
 - an MCP server that exposes tools for agents to interact with the Obsidian files.
 

@@ -2,7 +2,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig, saveRelayClientFileConfig } from "../src/relay-client/config";
+import {
+  DEFAULT_RELAY_API_URL,
+  DEFAULT_RELAY_CLIENT_CONFIG_FILENAME,
+  getDefaultRelayClientUserConfigPath,
+  loadRelayClientFileConfig,
+  RELAY_CLIENT_CONFIG_FILE_MODE,
+  resolveRelayClientConfigPath,
+  saveRelayClientFileConfig,
+} from "../src/relay-client/config";
 import { RelayClient } from "../src/relay-client/relayClient";
 import { S3RemoteFolder } from "../src/relay-client/s3rn";
 
@@ -18,13 +26,38 @@ afterEach(() => {
 });
 
 describe("relay-client config", () => {
-  it("saves and loads the local config file", () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-relay-config-"));
+  it("prefers an existing local config and otherwise falls back to the user config path", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-relay-config-path-"));
     tempDirs.push(tempDir);
 
     const env = {
       ...process.env,
-      RELAY_CLIENT_CONFIG: path.join(tempDir, "relay-config.json"),
+      XDG_CONFIG_HOME: path.join(tempDir, "xdg"),
+    };
+    const cwd = path.join(tempDir, "project");
+    fs.mkdirSync(cwd);
+
+    expect(resolveRelayClientConfigPath({ cwd, env })).toBe(
+      path.join(tempDir, "xdg", "obsidian-relay-mcp", "config.json"),
+    );
+    expect(getDefaultRelayClientUserConfigPath(env)).toBe(
+      path.join(tempDir, "xdg", "obsidian-relay-mcp", "config.json"),
+    );
+
+    const localConfigPath = path.join(cwd, DEFAULT_RELAY_CLIENT_CONFIG_FILENAME);
+    fs.writeFileSync(localConfigPath, "{}\n", "utf8");
+
+    expect(resolveRelayClientConfigPath({ cwd, env })).toBe(localConfigPath);
+  });
+
+  it("saves and loads the local config file", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-relay-config-"));
+    tempDirs.push(tempDir);
+
+    const configPath = path.join(tempDir, "relay-config.json");
+    const env = {
+      ...process.env,
+      RELAY_CLIENT_CONFIG: configPath,
     };
 
     saveRelayClientFileConfig(
@@ -49,6 +82,7 @@ describe("relay-client config", () => {
       bearerToken: "token-123",
       relayId: "relay-guid",
     });
+    expect(fs.statSync(configPath).mode & 0o777).toBe(RELAY_CLIENT_CONFIG_FILE_MODE);
   });
 
   it("uses the saved config plus the default Relay API url when env vars are absent", async () => {

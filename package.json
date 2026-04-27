@@ -1,10 +1,44 @@
 {
-  "name": "mcp-relay",
+  "name": "obsidian-relay-mcp",
   "version": "0.1.0",
-  "private": true,
-  "description": "Headless relay-client library for reading and updating Relay-backed Obsidian notes over Yjs.",
+  "description": "MCP server and TypeScript client for reading and editing Relay-backed Obsidian notes conflict-free.",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alexschlueter/obsidian-relay-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alexschlueter/obsidian-relay-mcp/issues"
+  },
+  "homepage": "https://github.com/alexschlueter/obsidian-relay-mcp#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "obsidian",
+    "relay",
+    "yjs"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "obsidian-relay-mcp": "dist/bin/obsidian-relay-mcp.js",
+    "obsidian-relay-mcp-stdio": "dist/bin/mcp-relay-stdio.js",
+    "obsidian-relay-mcp-http": "dist/bin/mcp-relay-http.js",
+    "obsidian-relay-mcp-login-github": "dist/bin/relay-github-login.js",
+    "obsidian-relay-mcp-choose-target": "dist/bin/relay-choose-target.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -19,6 +53,7 @@
     "mcp:http": "tsc -p tsconfig.json && node dist/bin/mcp-relay-http.js",
     "mcp:stdio": "tsc -p tsconfig.json && node dist/bin/mcp-relay-stdio.js",
     "probe:file-token": "tsc -p tsconfig.json && node dist/bin/relay-probe-file-token.js",
+    "prepack": "pnpm build",
     "test": "vitest run",
     "test:live": "vitest run test/liveRelay.integration.test.ts"
   },

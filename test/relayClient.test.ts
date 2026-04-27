@@ -202,6 +202,34 @@ describe("RelayClient handle editing", () => {
     expect(attachment.dataBase64).toBeUndefined();
   });
 
+  it("caps streamed inline attachment downloads even without a content-length header", async () => {
+    const harness = createHarness("hello");
+    harness.setAttachmentBytes(new Uint8Array([0, 1, 2, 3, 4, 5]));
+    harness.setAttachmentContentLengthHeader(false);
+    harness.addFolderEntry(attachmentPath, {
+      id: attachmentId,
+      type: "image",
+      hash: attachmentHash,
+      mimetype: "image/png",
+    });
+    const relay = harness.createRelay();
+
+    const attachment = await relay.readAttachment(attachmentPath, {
+      includeImageContent: true,
+      maxImageContentMB: 3 / 1024 / 1024,
+    });
+
+    expect(attachment).toMatchObject({
+      ok: true,
+      url: "https://download.test/logo.png",
+      contentType: "image/png",
+      contentLength: 6,
+      contentLimitExceeded: true,
+      hash: attachmentHash,
+    });
+    expect(attachment.dataBase64).toBeUndefined();
+  });
+
   it("returns a fresh handle for each read and applies update-file patches", async () => {
     const harness = createHarness("hello world\n");
     const relay = harness.createRelay();
@@ -393,6 +421,7 @@ function createHarness(initialText: string) {
   let failNoteAsUpdate = false;
   let attachmentDownloadCount = 0;
   let currentAttachmentBytes = attachmentBytes;
+  let includeAttachmentContentLengthHeader = true;
 
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -471,7 +500,9 @@ function createHarness(initialText: string) {
       attachmentDownloadCount += 1;
       return binaryResponse(currentAttachmentBytes, {
         "Content-Type": "image/png",
-        "Content-Length": String(currentAttachmentBytes.byteLength),
+        ...(includeAttachmentContentLengthHeader
+          ? { "Content-Length": String(currentAttachmentBytes.byteLength) }
+          : {}),
       });
     }
 
@@ -501,6 +532,9 @@ function createHarness(initialText: string) {
     },
     setAttachmentBytes(bytes: Uint8Array) {
       currentAttachmentBytes = bytes;
+    },
+    setAttachmentContentLengthHeader(enabled: boolean) {
+      includeAttachmentContentLengthHeader = enabled;
     },
     addFolderEntry(
       path: string,

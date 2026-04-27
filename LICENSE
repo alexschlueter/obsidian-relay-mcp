@@ -1,0 +1,153 @@
+Source-Visible Noncommercial and Internal Use License v0.3
+
+Copyright (c) 2026 Alexander Schlüter
+
+1. Definitions
+
+“Software” means this project and any part of it, including source code, object
+code, documentation, examples, configuration, build files, package metadata,
+assets, and generated files.
+
+“Licensor” means the copyright holder of the Software.
+
+“You” means any individual, company, organization, or other legal entity using
+the Software.
+
+“Noncommercial Use” means use that is not primarily intended for, directed
+toward, or connected with commercial advantage, monetary compensation, business
+operations, paid services, revenue generation, or the provision of products or
+services to third parties.
+
+“Internal Business Use” means use of the Software by a company or organization
+only within that company or organization, only for its own internal operations,
+and not as part of any product, service, deliverable, hosted service, software
+package, platform, integration, consulting engagement, or other thing provided
+or made available to any third party.
+
+“Distribute” means to provide, publish, transfer, sublicense, sell, rent, lease,
+lend, host, mirror, bundle, include, embed, make available, or otherwise give
+access to the Software or any part of it, whether modified or unmodified, to any
+third party.
+
+“Based On” means copied from, modified from, derived from, linked with, dependent
+on, bundled with, incorporating, wrapping, translating, porting, reimplementing
+substantial parts of, or otherwise using the Software or any part of it.
+
+2. Noncommercial License Grant
+
+Subject to this License, the Licensor grants You a worldwide, royalty-free,
+non-exclusive license to use, copy, modify, create works Based On, publish, and
+Distribute the Software for Noncommercial Use.
+
+3. Internal Business Use License Grant
+
+Subject to this License, the Licensor grants companies and organizations a
+worldwide, royalty-free, non-exclusive license to use, copy, and modify the
+Software solely for Internal Business Use.
+
+This Internal Business Use license does not permit Distribution.
+
+4. Attribution and License Notice
+
+If You Distribute the Software, any substantial portion of the Software, or any
+work Based On the Software under the Noncommercial Use license, You must include:
+
+(a) the copyright notice above;
+(b) this License text; and
+(c) a clear notice that the distributed work uses, includes, modifies, or is
+    based on the Software.
+
+These notices must be placed where recipients can reasonably find them, such as
+in a LICENSE file, NOTICE file, documentation, source-code header, package
+metadata, about dialog, credits page, or equivalent location.
+
+5. Commercial Restrictions
+
+Except under a separate written commercial license from the Licensor, You may
+not:
+
+(a) sell, rent, lease, sublicense, commercially license, or commercially
+    distribute the Software or any part of it;
+
+(b) include, embed, bundle, link with, require, depend on, auto-install, host,
+    mirror, or otherwise make the Software or any part of it available as part
+    of any commercial product, service, application, library, plugin, extension,
+    package, platform, hosted service, consulting deliverable, or other
+    commercial offering;
+
+(c) provide software, products, services, deliverables, or hosted functionality
+    Based On the Software to any third party for compensation, business
+    advantage, or other commercial purpose;
+
+(d) sell or commercially provide any larger work, product, service, platform, or
+    offering that includes, depends on, incorporates, wraps, modifies, or is
+    Based On the Software or any part of it.
+
+These restrictions apply even if the Software is only a small part of a larger
+work, product, service, platform, or offering.
+
+6. No Sublicensing
+
+You may not sublicense the Software. Any rights for third parties must come
+directly from this License or from a separate written license from the Licensor.
+
+7. Patent Rights
+
+Subject to this License, the Licensor grants You a worldwide, royalty-free,
+non-exclusive patent license to make, have made, use, run, copy, modify, and
+Distribute the Software, but only to the extent necessary for uses expressly
+permitted by this License.
+
+For companies and organizations, this patent license permits use only for
+Internal Business Use.
+
+This patent license does not permit selling, offering for sale, commercially
+licensing, commercially distributing, hosting, providing as a service,
+sublicensing, or otherwise making the Software, any part of the Software, or
+anything Based On the Software available to third parties for a commercial
+purpose.
+
+This patent license terminates automatically if Your rights under this License
+terminate.
+
+8. Termination, Revocation, and No Cure Period
+
+Any violation of this License immediately terminates all rights granted to You
+under this License, automatically and without notice.
+
+The Licensor may revoke any or all rights granted to You under this License if
+You violate this License. The Licensor may do so without prior notice and
+without giving You an opportunity to cure the violation.
+
+Stopping the violation, removing the Software, or otherwise attempting to cure
+the violation does not restore Your rights unless the Licensor expressly agrees
+in writing.
+
+Termination or revocation does not limit the Licensor’s right to seek damages,
+profits, injunctive relief, attorneys’ fees where available, or any other legal
+or equitable remedy for past, present, or continuing violations.
+
+9. No Trademark Rights
+
+This License does not grant permission to use the Licensor’s names, trademarks,
+service marks, logos, or branding except as necessary to provide attribution
+required by this License.
+
+10. No Warranty
+
+The Software is provided “as is,” without warranty of any kind, express or
+implied, including warranties of merchantability, fitness for a particular
+purpose, non-infringement, accuracy, availability, or security.
+
+11. Limitation of Liability
+
+To the maximum extent permitted by law, the Licensor will not be liable for any
+claim, damages, loss, liability, cost, or expense arising from or related to the
+Software or this License, whether under contract, tort, copyright, patent, or any
+other legal theory.
+
+12. Separate Commercial Licenses
+
+The Licensor may offer separate commercial licenses for uses not permitted by
+this License. A separate commercial license must be in writing and signed or
+otherwise expressly agreed by the Licensor.

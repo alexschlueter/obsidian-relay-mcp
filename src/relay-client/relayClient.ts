@@ -160,7 +160,7 @@ export class RelayClient {
 
     if (!bearerToken) {
       throw new Error(
-        `Missing Relay bearer token. Set RELAY_BEARER_TOKEN or run pnpm login:github to populate ${loaded.path}`,
+        `Missing Relay bearer token. Set RELAY_BEARER_TOKEN or run obsidian-relay-mcp login:github to populate ${loaded.path}`,
       );
     }
 

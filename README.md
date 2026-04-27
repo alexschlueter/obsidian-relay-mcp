@@ -1,244 +1,216 @@
-# mcp-relay
+# obsidian-relay-mcp
 
-`mcp-relay` now contains a headless `relay-client` TypeScript package for reading and updating Relay-backed Obsidian notes without running Obsidian itself.
+`obsidian-relay-mcp` is an MCP server and TypeScript client for working with
+[Obsidian](https://obsidian.md/) notes that sync through [Relay](https://relay.md/). It talks to Relay
+directly, so an agent can read notes, patch Markdown, inspect attachments, and
+collaborate in live edit sessions conflict-free and without a running Obsidian desktop instance.
 
-The first pass is intentionally narrow: it focuses on existing markdown notes inside a Relay shared folder, and it writes changes back as native Yjs updates so Relay and Obsidian peers receive them through the normal sync path.
+This project is useful when your notes are already in a Relay shared folder and
+you want an AI coding or writing agent to work with those notes through MCP.
 
-## Current Scope
+## Features
 
-Implemented in this repo:
+- List Relay-backed Obsidian files by vault-relative path.
+- Read Markdown notes and apply Codex-style `*** Update File` patches.
+- Open live collaborative edit sessions with visible cursor/selection presence.
+- Read attachment metadata and temporary download URLs.
+- Optionally include text, image, or audio attachment content in MCP results.
+- Run as a stdio MCP server, a Streamable HTTP MCP server, or a TypeScript library.
 
-- control-plane token exchange through `POST /token`
-- shared-folder loading through the folder Yjs document
-- `filemeta_v0` parsing and path resolution
-- reading existing markdown notes by path while creating in-memory edit handles
-- applying Codex-style `*** Update File` patches against stored Yjs handle state
-- opening live edit sessions over the Relay websocket provider
-- reading and publishing awareness cursor/selection state
-- markdown-source cursor, selection, search, and edit helpers for live sessions
-- MCP server wrappers for stdio and Streamable HTTP
-- writing existing markdown notes by path
-- diff-based Yjs text mutations for less destructive updates under the hood
-- focused tests for S3RN handling, folder parsing, and text patching
+## Limitations
 
-Explicitly not implemented yet:
+- Only github login for now
+- The MCP server does not (yet) expose file creation, rename, delete operations
+- Currently restricted to one configured relayId and folderId
 
-- create, rename, or delete flows
-- binary upload and download tooling
-- direct relay-server admin mode
+## Requirements
 
-## Background
+- Node.js 22 or newer.
+- Access to a Relay account and shared folder.
+- A Relay bearer token, usually created by the GitHub login helper.
 
-This repo exists to support an MCP server that can operate on Obsidian documents from a machine other than the desktop where Obsidian is running.
+## Quick Start
 
-Relevant local references:
+Log in to Relay:
 
-- Relay plugin: `/home/alex/code/Relay`
-- Relay server API notes: [server-api.md](/home/alex/code/mcp-relay/server-api.md)
-- relay-client implementation plan: [relay-client-plan.md](/home/alex/code/mcp-relay/relay-client-plan.md)
-- relay-server template: `/home/alex/code/relay-server-template`
-- relay-server source: `/home/alex/code/relay-server`
-- relay webhook client: `/home/alex/code/relay-git-sync`
+```bash
+npx -y obsidian-relay-mcp login:github
+```
 
-## Project Layout
+Choose the Relay and shared folder to expose:
 
-- [src/relay-client/auth.ts](/home/alex/code/mcp-relay/src/relay-client/auth.ts): control-plane token exchange and short-lived token caching
-- [src/relay-client/folderIndex.ts](/home/alex/code/mcp-relay/src/relay-client/folderIndex.ts): `filemeta_v0` parsing, path normalization, and resource lookup
-- [src/relay-client/docClient.ts](/home/alex/code/mcp-relay/src/relay-client/docClient.ts): fetch and push Yjs updates over Relay HTTP endpoints
-- [src/relay-client/liveProvider.ts](/home/alex/code/mcp-relay/src/relay-client/liveProvider.ts): headless websocket sync and awareness provider
-- [src/relay-client/liveSession.ts](/home/alex/code/mcp-relay/src/relay-client/liveSession.ts): markdown-source live edit session tools
-- [src/relay-client/codexPatch.ts](/home/alex/code/mcp-relay/src/relay-client/codexPatch.ts): restricted Codex `*** Update File` patch parsing and application
-- [src/relay-client/textPatch.ts](/home/alex/code/mcp-relay/src/relay-client/textPatch.ts): diff and replace helpers for `Y.Text`
-- [src/relay-client/relayClient.ts](/home/alex/code/mcp-relay/src/relay-client/relayClient.ts): high-level API for loading folders, minting edit handles, and applying handle-based patches
-- [src/mcp/relayMcpServer.ts](/home/alex/code/mcp-relay/src/mcp/relayMcpServer.ts): MCP tool registration with snake_case tool names and camelCase arguments
-- [src/mcp/stdioServer.ts](/home/alex/code/mcp-relay/src/mcp/stdioServer.ts): stdio MCP transport entrypoint
-- [src/mcp/httpServer.ts](/home/alex/code/mcp-relay/src/mcp/httpServer.ts): Streamable HTTP MCP endpoint
+```bash
+npx -y obsidian-relay-mcp choose-target
+```
 
-## Configuration
+Run the stdio MCP server:
 
-Recommended v1 environment variables:
+```bash
+npx -y obsidian-relay-mcp
+```
 
-- `RELAY_API_URL`
-- `RELAY_AUTH_URL` for GitHub login helpers or non-default auth domains
-- `RELAY_BEARER_TOKEN`
-- `RELAY_ID`
-- `RELAY_FOLDER_ID`
-- `RELAY_CLIENT_CONFIG` optional path to the local JSON config file
+By default, credentials are stored in your user config directory, for example
+`~/.config/obsidian-relay-mcp/config.json` on Linux. If a `.relay-client.json`
+file already exists in the current directory, it is used for local development
+compatibility. Set `RELAY_CLIENT_CONFIG` to force a specific config path.
 
-`RELAY_ID` and `RELAY_FOLDER_ID` are optional if you always pass them explicitly to the API methods, but they make the default `readText`, `writeText`, and `applyPatch` calls much cleaner.
+## OpenClaw
 
-If `RELAY_API_URL` is not set, `relay-client` now defaults to `https://api.system3.md`.
+OpenClaw stores MCP servers under `mcp.servers`. The easiest setup is to let
+OpenClaw launch the package through `npx`:
 
-If `.relay-client.json` exists in the current working directory, `RelayClient.fromEnv()` will also load settings from that file and use them as fallbacks for:
+```text
+/mcp set obsidian={"command":"npx","args":["-y","obsidian-relay-mcp"]}
+```
 
-- `apiUrl`
-- `authUrl`
-- `bearerToken`
-- `relayId`
-- `folderId`
+If you keep the Relay config in a custom path, pass it explicitly:
 
-Environment variables still win over the config file.
+```text
+/mcp set obsidian={"command":"npx","args":["-y","obsidian-relay-mcp"],"env":{"RELAY_CLIENT_CONFIG":"/absolute/path/to/config.json"}}
+```
 
-## API
+For local development from a clone:
 
-The main entry point is `RelayClient`.
+```text
+/mcp set obsidian={"command":"pnpm","args":["mcp:stdio"],"cwd":"/absolute/path/to/obsidian-relay-mcp"}
+```
 
-```ts
-import { RelayClient } from "mcp-relay";
+`read_attachment` can return image and audio content directly when content inclusion is
+enabled in the server config, which works well with OpenClaw's media handling.
+For all attachments, the tool returns metadata and a temporary URL from which the agent can download the file.
 
-const relay = RelayClient.fromEnv();
+## Other MCP Clients
 
-const { text, patchHandle } = await relay.readText("Notes/Plan.md");
-const nextText = `${text}\n- synced from relay-client`;
+Use the package binary as a stdio server:
 
-const patch = [
-  "*** Begin Patch",
-  "*** Update File: Notes/Plan.md",
-  "@@",
-  ...toPatchLines(text, "-"),
-  ...toPatchLines(nextText, "+"),
-  "*** End Patch",
-].join("\n");
-
-const result = await relay.applyPatch(patchHandle, patch);
-
-await relay.writeText("Notes/Scratch.md", "# Replaced\n\nThis note was rewritten.");
-
-function toPatchLines(value: string, prefix: "+" | "-"): string[] {
-  const lines = value.replace(/\r\n/g, "\n").split("\n");
-  if (value.endsWith("\n")) {
-    lines.pop();
+```json
+{
+  "mcpServers": {
+    "obsidian": {
+      "command": "npx",
+      "args": ["-y", "obsidian-relay-mcp"]
+    }
   }
-  return lines.map((line) => `${prefix}${line}`);
 }
 ```
 
-You can also pass the Relay coordinates explicitly:
-
-```ts
-const relay = RelayClient.fromEnv();
-
-const opened = await relay.readText(
-  "11111111-1111-1111-1111-111111111111",
-  "22222222-2222-2222-2222-222222222222",
-  "Notes/Plan.md",
-);
-```
-
-`readText(...)` now returns:
-
-- `text`: the current markdown string
-- `patchHandle`: a fresh in-memory edit handle tied to the full Yjs state that was read
-- `handle`: deprecated compatibility alias for `patchHandle`
-- `totalChars`, `startChar`, `endChar`, and `truncated`: window metadata for partial reads
-
-Handles are process-local and in-memory only. Every `readText(...)` call returns a new 5-character `patchHandle`, even for the same note. The default handle TTL is 60 seconds. You can override it or request a text window with an options object:
-
-```ts
-const windowed = await relay.readText("Notes/Plan.md", {
-  startChar: 1000,
-  maxChars: 2000,
-  ttlSeconds: 120,
-});
-```
-
-`applyPatch(...)` accepts a Codex-style patch with exactly one `*** Update File:` operation. The patch path is required inside the patch text. You may also pass the path as a separate argument, and `relay-client` will validate that both paths match the handle's stored document path.
-
-`applyPatch(...)` and `patchText(...)` accept `options.returnResult`, which defaults to `true`. Set it to `false` if you only need the `changed` / `staleHandle` flags and want to skip returning the local post-patch text.
-
-If remote peers changed the note after the handle was created, `applyPatch(...)` still applies your patch against the handle's local Yjs state and returns `staleHandle: true`. In that case, the returned `resultText` is the handle's local post-patch text, not necessarily a fully refreshed merged server snapshot.
-
-High-level methods currently available:
-
-- `loadFolder()`
-- `loadFolder(relayId, folderId)`
-- `resolvePath(folder, path)`
-- `listFiles(options?)`
-- `readText(path, optionsOrTtlSeconds?)`
-- `readText(relayId, folderId, path, optionsOrTtlSeconds?)`
-- `applyPatch(handle, patch, options?)`
-- `applyPatch(handle, path, patch, options?)`
-- `patchText(handle, patch, options?)`
-- `patchText(handle, path, patch, options?)`
-- `writeText(path, nextText)`
-- `writeText(relayId, folderId, path, nextText)`
-
-Live collaboration methods are separate from patch handles. `openEditSession(...)` creates a live websocket-backed Yjs session, publishes the agent cursor to Obsidian collaborator presence, and returns a 5-character `sessionId`. Live tools mutate the live `Y.Text` immediately. Match-consuming methods can omit `sessionId` when all match ids come from one known live session.
-
-```ts
-const { sessionId } = await relay.openEditSession("Notes/Plan.md", "Codex");
-
-const matches = await relay.searchText(sessionId, "TODO");
-await relay.selectText(sessionId, matches.matches[0].matchId);
-await relay.insertText(sessionId, "DONE");
-
-const cursors = await relay.listActiveCursors(sessionId);
-```
-
-Live-session methods:
-
-- `openEditSession(path, agentName, ttlSeconds?)`
-- `openEditSession(relayId, folderId, path, agentName, ttlSeconds?)`
-- `closeEditSession(sessionId)`
-- `getCursorContext(sessionId, options?)`
-- `listActiveCursors(sessionId)`
-- `searchText(sessionId, query, maxResults?)`
-- `replaceMatches(sessionId, matchIds, text)`
-- `placeCursor(sessionId, matchId, edge?)`
-- `placeCursorAtDocumentBoundary(sessionId, boundary)`
-- `selectText(sessionId, matchId)`
-- `selectCurrentBlock(sessionId)`
-- `selectBetweenMatches(sessionId, startMatchId, endMatchId, startEdge?, endEdge?)`
-- `clearSelection(sessionId)`
-- `insertText(sessionId, text)`
-- `deleteSelection(sessionId)`
-
-## MCP Server
-
-The MCP server exposes the configured Obsidian note folder only. It loads auth and target settings through `RelayClient.fromEnv()`, then requires `RELAY_ID` and `RELAY_FOLDER_ID` to be present through env or `.relay-client.json`. Tool calls take vault-relative `path` values; agents do not choose sync targets.
-
-Run over stdio for local MCP clients:
+To run the Streamable HTTP server instead:
 
 ```bash
-cd /home/alex/code/mcp-relay
-pnpm mcp:stdio
+npx -y obsidian-relay-mcp http
 ```
 
-Run over Streamable HTTP:
+The HTTP server defaults to `http://127.0.0.1:3333/mcp`.
 
-```bash
-cd /home/alex/code/mcp-relay
-pnpm mcp:http
-```
-
-The HTTP server defaults to `http://127.0.0.1:3333/mcp`. Optional env vars:
+Optional HTTP environment variables:
 
 - `MCP_RELAY_HOST`
 - `MCP_RELAY_PORT`
 - `MCP_RELAY_ENDPOINT`
 - `MCP_RELAY_ALLOWED_HOSTS`, comma-separated
 
-MCP tools:
+## Configuration
 
-- `list_files`: discover vault-relative Obsidian paths. Optional `query`, `pathPrefix`, `maxResults`, `offset`.
-- `read_text`: read markdown by `path`; returns `text`, window metadata, and `patchHandle`. Optional `ttlSeconds`, `startChar`, `maxChars`.
-- `apply_patch`: apply a Codex-style update patch by `patchHandle`. Optional `path` guard and `returnResult`.
-- `open_edit_session`: open a live edit session by `path` and required `agentName`. Optional `ttlSeconds`, default 600.
-- `close_edit_session`: close a live edit session.
-- `get_cursor_context`: inspect the agent cursor or an Obsidian collaborator cursor by `userId`, `userName`, or `clientId`.
-- `list_active_cursors`: list visible Obsidian collaborator cursors for a live session.
-- `search_text`: search live Markdown text and return short match ids plus context.
+The client loads configuration from environment variables first, then from the
+config file.
+
+Common environment variables:
+
+- `RELAY_CLIENT_CONFIG`: explicit JSON config path.
+- `RELAY_API_URL`: Relay control-plane API URL. Defaults to `https://api.system3.md`.
+- `RELAY_AUTH_URL`: Relay auth URL. Usually inferred from `RELAY_API_URL`.
+- `RELAY_BEARER_TOKEN`: Relay bearer token.
+- `RELAY_ID`: default Relay id.
+- `RELAY_FOLDER_ID`: default shared folder id.
+
+The saved config may contain a bearer token and auth refresh record. The CLI
+writes it with owner-only file permissions where the operating system supports
+Unix-style modes.
+
+Example config:
+
+```json
+{
+  "apiUrl": "https://api.system3.md",
+  "relayId": "00000000-0000-0000-0000-000000000000",
+  "folderId": "11111111-1111-1111-1111-111111111111",
+  "attachments": {
+    "includeTextContent": true,
+    "maxTextChars": 2000,
+    "includeImageContent": true,
+    "maxImageContentMB": 2,
+    "includeAudioContent": false,
+    "maxAudioContentMB": 2
+  }
+}
+```
+
+Attachment inline content is disabled by default. Enable only the content types
+you want agents to receive directly. Use the `max...` options to prevent using too many tokens in context.
+
+## MCP Tools
+
+- `list_files`: list or search vault-relative paths.
+- `read_text`: read a Markdown note and receive a short-lived `patchHandle`.
+- `apply_patch`: apply one Codex-style update patch against a `patchHandle`.
+- `read_attachment`: get attachment metadata, temporary download URL, and optional inline content.
+- `open_edit_session`: open a live collaborative editing session.
+- `close_edit_session`: close a live session and clear its presence.
+- `get_cursor_context`: inspect the agent cursor or a collaborator cursor.
+- `list_active_cursors`: list collaborator cursor states visible in the session.
+- `search_text`: search live Markdown text and create match ids.
 - `replace_matches`: replace stored live match ids.
 - `place_cursor`: place the agent cursor at a stored match.
-- `place_cursor_at_document_boundary`: place the agent cursor at document start or end.
+- `place_cursor_at_document_boundary`: place the cursor at the start or end.
 - `select_text`: select a stored match.
-- `select_current_block`: select the current Markdown source block.
-- `select_between_matches`: select a range between two stored matches.
+- `select_current_block`: select the current Markdown block.
+- `select_between_matches`: select a range between two matches.
 - `clear_selection`: collapse the current selection.
-- `insert_text`: insert raw Markdown at the agent cursor or replace the current selection.
+- `insert_text`: insert Markdown at the current cursor or selection.
 - `delete_selection`: delete the current selection.
 
-The MCP server intentionally does not expose `writeText`, create/rename/delete file operations, arbitrary range deletion, or sync target selection arguments.
+Patch handles and live session ids are process-local and expire automatically.
+The default patch handle TTL is 60 seconds. The default live session TTL in the
+MCP server is 10 minutes.
+
+## TypeScript API
+
+```ts
+import { RelayClient } from "obsidian-relay-mcp";
+
+const relay = RelayClient.fromEnv();
+
+const read = await relay.readText("Notes/Plan.md", {
+  maxChars: 12000,
+  ttlSeconds: 120,
+});
+
+const patch = [
+  "*** Begin Patch",
+  "*** Update File: Notes/Plan.md",
+  "@@",
+  "-old text",
+  "+new text",
+  "*** End Patch",
+].join("\n");
+
+await relay.applyPatch(read.patchHandle, patch);
+```
+
+Useful high-level methods:
+
+- `listFiles(options?)`
+- `readText(path, options?)`
+- `readAttachment(path, options?)`
+- `applyPatch(handle, patch, options?)`
+- `patchText(handle, patch, options?)`
+- `openEditSession(path, agentName, ttlSeconds?)`
+- `searchText(sessionId, query, maxResults?)`
+- `insertText(sessionId, text)`
+- `closeEditSession(sessionId)`
+
+`applyPatch` and `patchText` return `resultText` only when
+`options.returnResult` is `true`.
 
 ## Development
 
@@ -247,124 +219,37 @@ pnpm install
 pnpm check
 pnpm test
 pnpm build
-pnpm login:github
-pnpm choose:target
 pnpm mcp:stdio
 pnpm mcp:http
 ```
 
-Verified in this workspace:
-
-- `pnpm check`
-- `pnpm vitest run`
-- `pnpm build`
-
-## Live Test
-
-There is now a real integration test for a live Relay-backed note, with an optional read-only attachment check:
-
-- [test/liveRelay.integration.test.ts](/home/alex/code/obsidian-relay-mcp/test/liveRelay.integration.test.ts)
-
-The live test file needs credentials and a sync target from saved config or env:
-
-- `RELAY_API_URL`
-- `RELAY_BEARER_TOKEN`
-- `RELAY_ID`
-- `RELAY_FOLDER_ID`
-
-The note tests additionally need `RELAY_LIVE_TEST_NOTE_PATH`.
-
-Run the read-only note smoke test:
+Live integration tests are skipped unless you provide live Relay test paths:
 
 ```bash
-RELAY_API_URL=...
-RELAY_BEARER_TOKEN=...
-RELAY_ID=...
-RELAY_FOLDER_ID=...
-RELAY_LIVE_TEST_NOTE_PATH="Path/To/Safe-Test-Note.md" \
-pnpm test:live
+RELAY_LIVE_TEST_NOTE_PATH="Notes/Test.md" pnpm test:live
 ```
 
-To verify only attachment downloads, point the test at a small attachment in the same vault:
+## Security Notes
 
-```bash
-RELAY_API_URL=...
-RELAY_BEARER_TOKEN=...
-RELAY_ID=...
-RELAY_FOLDER_ID=...
-RELAY_LIVE_TEST_ATTACHMENT_PATH="Path/To/Image.png" \
-pnpm vitest run test/liveRelay.integration.test.ts -t "reads a configured attachment"
-```
+- Treat the Relay config file like a password file.
+- Attachment download URLs may be temporary bearer-style URLs; avoid pasting them
+  into public logs.
+- The HTTP MCP server binds to `127.0.0.1` by default. Be deliberate if you
+  change the host or allowed-host settings.
 
-`RELAY_LIVE_TEST_ATTACHMENT_MAX_BYTES` defaults to `5000000`.
+## License
 
-If you already saved credentials into `.relay-client.json`, you can omit `RELAY_API_URL` and `RELAY_BEARER_TOKEN`, and you can omit `RELAY_ID` / `RELAY_FOLDER_ID` too if those are also stored in the config.
+See [LICENSE](./LICENSE).
 
-If you want the test to verify the write path too, enable the reversible round-trip step:
+Non-binding summary:
 
-```bash
-RELAY_API_URL=...
-RELAY_BEARER_TOKEN=...
-RELAY_ID=...
-RELAY_FOLDER_ID=...
-RELAY_LIVE_TEST_NOTE_PATH="Path/To/Safe-Test-Note.md" \
-RELAY_LIVE_TEST_WRITE=1 \
-pnpm test:live
-```
+- Do whatever you want non-commercially, as long as you attribute and include
+  the license with substantial portions
+- Companies may use internally
+- No selling, even as small part in larger project
 
-The write variant appends a unique marker, waits until it can read that marker back through Relay, then removes it again and checks that the note returns to its original contents. Use a disposable or low-risk scratch note while testing.
+## Acknowledgements
 
-## GitHub Login
-
-If you do not want to pull `RELAY_BEARER_TOKEN` out of Obsidian localStorage manually, you can now fetch a fresh Relay auth token through the same GitHub OAuth provider flow the plugin uses.
-
-Run:
-
-```bash
-cd /home/alex/code/mcp-relay
-pnpm login:github
-```
-
-If your Relay deployment uses a non-default auth host, set `RELAY_AUTH_URL` too:
-
-```bash
-cd /home/alex/code/mcp-relay
-RELAY_API_URL=https://api.example.com \
-RELAY_AUTH_URL=https://auth.example.com \
-pnpm login:github
-```
-
-The command prints a GitHub login URL, waits for the OAuth callback to reach Relay, then prints shell `export` lines for `RELAY_BEARER_TOKEN` and the resolved auth settings.
-It also saves the returned token and auth record into `.relay-client.json`, which `RelayClient.fromEnv()` will load automatically later.
-
-## Choose Relay Target
-
-Once you have a saved or env-provided bearer token, you can fetch the relays and shared folders available to that account, choose one interactively, and save the selected GUIDs into `.relay-client.json`:
-
-```bash
-cd /home/alex/code/mcp-relay
-pnpm choose:target
-```
-
-The chooser:
-
-- loads auth from env or `.relay-client.json`
-- refreshes the saved bearer token if needed
-- lists available `relays`
-- lists shared folders for the selected relay
-- saves the selected `RELAY_ID` and `RELAY_FOLDER_ID` back into `.relay-client.json`
-
-This makes the later `RelayClient.fromEnv()` and `pnpm test:live` flows simpler because they can pick up the saved target automatically.
-
-## Notes
-
-- `relay-client` uses the control-plane-compatible `/token` flow, not privileged direct relay-server auth.
-- Folder entries inside `filemeta_v0` are treated as metadata within the shared folder, not as standalone Relay document resources.
-- `readText(...)` stores the fetched Yjs document state behind a random in-memory handle; the handle itself does not embed auth.
-- `openEditSession(...)` stores a live local Yjs replica and awareness state behind a random in-memory session id; the session id itself does not embed auth.
-- `applyPatch(...)` validates and applies only `*** Update File` patches, and it matches them against the handle's stored text exactly.
-- Successful handle patches are sent back as Yjs deltas generated from the stored handle state, so Relay peers should receive them like normal collaborative edits.
-- Failed handle pushes do not persist the local handle mutation.
-- Live search match ids are also 5 characters. Anchors remain internal; tool responses return match ids, source positions, and context snippets.
-- Live match-consuming tools validate that the text at the anchored position still matches before editing. If not, they return a structured stale-match result instead of editing.
-- Relay bearer tokens do expire. The saved GitHub login config includes the auth record, and `relay-client` will attempt a PocketBase `authRefresh()` automatically when the bearer token is close to expiry.
+Relay is made by [system3](https://system3.md/).
+The live editing tool interface is inspired by [collaborative-ai-editor](https://github.com/electric-sql/collaborative-ai-editor).
+Most of this was written by GPT 5.4 and 5.5.

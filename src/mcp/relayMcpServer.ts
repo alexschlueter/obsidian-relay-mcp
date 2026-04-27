@@ -56,7 +56,7 @@ export function createRelayClientFromEnvForMcp(env: NodeJS.ProcessEnv = process.
   const client = RelayClient.fromEnv(env);
   if (!client.defaultRelayId || !client.defaultFolderId) {
     throw new Error(
-      "The Obsidian MCP server needs a configured sync target. Set RELAY_ID and RELAY_FOLDER_ID or run pnpm choose:target.",
+      "The Obsidian MCP server needs a configured sync target. Set RELAY_ID and RELAY_FOLDER_ID or run obsidian-relay-mcp choose-target.",
     );
   }
   return client;

@@ -8,7 +8,7 @@ startRelayMcpHttpServer({
   allowedHosts: parseCsv(process.env.MCP_RELAY_ALLOWED_HOSTS),
 })
   .then((server) => {
-    console.error(`mcp-relay Streamable HTTP listening at ${server.url}`);
+    console.error(`obsidian-relay-mcp Streamable HTTP listening at ${server.url}`);
   })
   .catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));

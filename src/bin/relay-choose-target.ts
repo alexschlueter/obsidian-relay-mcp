@@ -2,6 +2,7 @@
 
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
+import type { Readable, Writable } from "node:stream";
 import {
   DEFAULT_RELAY_API_URL,
   loadRelayClientFileConfig,
@@ -13,16 +14,20 @@ import {
   type RelaySummary,
 } from "../relay-client/directory";
 
-async function main(): Promise<void> {
-  const loaded = loadRelayClientFileConfig();
+export async function runRelayChooseTarget(
+  input: Readable = stdin,
+  output: Writable = stdout,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  const loaded = loadRelayClientFileConfig({ env });
   const config = loaded.config;
-  const apiUrl = process.env.RELAY_API_URL ?? config?.apiUrl ?? DEFAULT_RELAY_API_URL;
-  const authUrl = process.env.RELAY_AUTH_URL ?? config?.authUrl;
-  const bearerToken = process.env.RELAY_BEARER_TOKEN ?? config?.bearerToken;
+  const apiUrl = env.RELAY_API_URL ?? config?.apiUrl ?? DEFAULT_RELAY_API_URL;
+  const authUrl = env.RELAY_AUTH_URL ?? config?.authUrl;
+  const bearerToken = env.RELAY_BEARER_TOKEN ?? config?.bearerToken;
 
   if (!bearerToken) {
     throw new Error(
-      `Missing Relay bearer token. Run pnpm login:github first or set RELAY_BEARER_TOKEN. Expected config path: ${loaded.path}`,
+      `Missing Relay bearer token. Run obsidian-relay-mcp login:github first or set RELAY_BEARER_TOKEN. Expected config path: ${loaded.path}`,
     );
   }
 
@@ -40,8 +45,8 @@ async function main(): Promise<void> {
   }
 
   const rl = createInterface({
-    input: stdin,
-    output: stdout,
+    input,
+    output,
   });
 
   try {
@@ -138,8 +143,10 @@ async function promptForChoice<T>(
   }
 }
 
-main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`[relay-choose] ${message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  runRelayChooseTarget().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[relay-choose] ${message}`);
+    process.exitCode = 1;
+  });
+}

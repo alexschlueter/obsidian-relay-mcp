@@ -99,18 +99,18 @@ export class RelayFileClient {
       };
     }
 
-    const bytes = new Uint8Array(await downloadResponse.arrayBuffer());
-    if (options.maxContentBytes !== undefined && bytes.byteLength > options.maxContentBytes) {
+    const downloaded = await readResponseBytes(downloadResponse, options.maxContentBytes);
+    if (downloaded.contentLimitExceeded) {
       return {
-        contentLength: bytes.byteLength,
+        contentLength: downloaded.contentLength,
         contentType,
         contentLimitExceeded: true,
       };
     }
 
     return {
-      bytes,
-      contentLength: bytes.byteLength,
+      bytes: downloaded.bytes,
+      contentLength: downloaded.contentLength,
       contentType,
     };
   }
@@ -120,6 +120,69 @@ export class RelayFileClient {
       Authorization: `Bearer ${fileToken.token}`,
     };
   }
+}
+
+async function readResponseBytes(
+  response: Response,
+  maxContentBytes: number | undefined,
+): Promise<{ bytes?: Uint8Array; contentLength: number; contentLimitExceeded?: true }> {
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (maxContentBytes !== undefined && bytes.byteLength > maxContentBytes) {
+      return {
+        contentLength: bytes.byteLength,
+        contentLimitExceeded: true,
+      };
+    }
+    return {
+      bytes,
+      contentLength: bytes.byteLength,
+    };
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+
+      totalBytes += value.byteLength;
+      if (maxContentBytes !== undefined && totalBytes > maxContentBytes) {
+        await reader.cancel().catch(() => undefined);
+        return {
+          contentLength: totalBytes,
+          contentLimitExceeded: true,
+        };
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return {
+    bytes: concatUint8Arrays(chunks, totalBytes),
+    contentLength: totalBytes,
+  };
+}
+
+function concatUint8Arrays(chunks: Uint8Array[], totalBytes: number): Uint8Array {
+  const result = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 function buildExpiresAt(downloadUrl: string, fileToken: FileToken): { expiresAt?: string } {

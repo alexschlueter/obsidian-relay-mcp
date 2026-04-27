@@ -1,5 +1,4 @@
 - more obsidian types: canvas, bases (=table / db of notes)
-- attachments
 - file properties
 - query codex to scan relay code for more features we could add
 - self host relay
