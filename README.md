@@ -1,7 +1,7 @@
 # obsidian-relay-mcp
 
 `obsidian-relay-mcp` is an MCP server and TypeScript client for working with
-[Obsidian](https://obsidian.md/) notes that sync through [Relay](https://relay.md/). It talks to the Relay server
+[Obsidian](https://obsidian.md/) notes that sync through system3's [Relay](https://relay.md/). It talks to the Relay server
 directly, so an agent can read notes, patch Markdown, inspect attachments, and
 collaborate in live edit sessions conflict-free and without a running Obsidian desktop instance.
 
