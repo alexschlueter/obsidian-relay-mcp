@@ -1,5 +1,10 @@
+- video / gif in readme of collab with agent
 - more obsidian types: canvas, bases (=table / db of notes)
-- file properties
+- not properties
+- create, delete, rename of notes
+- check one of the many other direct-to-obsidian (or rest api) mcp for tool ideas
+- alternative impl: write obsidian-rest-api clone that uses relay-client instead of Obsidian instance. then just use a different MCP from rest project (those don't have collab tools though, obviously)
 - query codex to scan relay code for more features we could add
 - self host relay
-- clean up, publish to gh, maybe post relay discord / reddit
+- maybe post relay discord / reddit
+- describe collaboration more in SKILL.md, e.g. agent uses selection to hint what response is referring to
