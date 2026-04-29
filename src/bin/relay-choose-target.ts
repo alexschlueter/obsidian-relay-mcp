@@ -27,7 +27,7 @@ export async function runRelayChooseTarget(
 
   if (!bearerToken) {
     throw new Error(
-      `Missing Relay bearer token. Run obsidian-relay-mcp login:github first or set RELAY_BEARER_TOKEN. Expected config path: ${loaded.path}`,
+      `Missing Relay bearer token. Run obsidian-relay-mcp login first or set RELAY_BEARER_TOKEN. Expected config path: ${loaded.path}`,
     );
   }
 

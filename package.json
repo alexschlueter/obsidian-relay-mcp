@@ -27,7 +27,7 @@
     "obsidian-relay-mcp": "dist/bin/obsidian-relay-mcp.js",
     "obsidian-relay-mcp-stdio": "dist/bin/mcp-relay-stdio.js",
     "obsidian-relay-mcp-http": "dist/bin/mcp-relay-http.js",
-    "obsidian-relay-mcp-login-github": "dist/bin/relay-github-login.js",
+    "obsidian-relay-mcp-login": "dist/bin/relay-login.js",
     "obsidian-relay-mcp-choose-target": "dist/bin/relay-choose-target.js"
   },
   "files": [
@@ -49,7 +49,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "choose:target": "tsc -p tsconfig.json && node dist/bin/relay-choose-target.js",
-    "login:github": "tsc -p tsconfig.json && node dist/bin/relay-github-login.js",
+    "login": "tsc -p tsconfig.json && node dist/bin/relay-login.js",
     "mcp:http": "tsc -p tsconfig.json && node dist/bin/mcp-relay-http.js",
     "mcp:stdio": "tsc -p tsconfig.json && node dist/bin/mcp-relay-stdio.js",
     "probe:file-token": "tsc -p tsconfig.json && node dist/bin/relay-probe-file-token.js",

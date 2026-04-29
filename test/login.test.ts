@@ -4,6 +4,7 @@ import {
   getBearerTokenExpiryTime,
   resolveRelayAuthUrl,
 } from "../src/relay-client/login";
+import { parseRelayLoginProvider, parseRelayProviderSelection } from "../src/bin/relay-login";
 
 describe("relay login helpers", () => {
   it("prefers an explicit auth url", () => {
@@ -41,5 +42,30 @@ describe("relay login helpers", () => {
     const token = `${header}.${payload}.signature`;
 
     expect(getBearerTokenExpiryTime(token)).toBe(2_000_000_000_000);
+  });
+
+  it("parses generic relay login providers from cli arguments", () => {
+    expect(parseRelayLoginProvider(["node", "obsidian-relay-mcp", "login:google"])).toBe("google");
+    expect(parseRelayLoginProvider(["node", "obsidian-relay-mcp", "login", "microsoft"])).toBe(
+      "microsoft",
+    );
+    expect(parseRelayLoginProvider(["node", "obsidian-relay-mcp", "login", "--provider=oidc"])).toBe(
+      "oidc",
+    );
+    expect(parseRelayLoginProvider(["node", "obsidian-relay-mcp", "login", "-p", "discord"])).toBe(
+      "discord",
+    );
+    expect(parseRelayLoginProvider(["node", "obsidian-relay-mcp", "login"], "google")).toBe("google");
+    expect(parseRelayLoginProvider(["node", "obsidian-relay-mcp", "login"])).toBeUndefined();
+  });
+
+  it("parses interactive provider selections by number or name", () => {
+    const providers = ["github", "google", "microsoft"];
+
+    expect(parseRelayProviderSelection("1", providers)).toBe("github");
+    expect(parseRelayProviderSelection("2", providers)).toBe("google");
+    expect(parseRelayProviderSelection("Microsoft", providers)).toBe("microsoft");
+    expect(parseRelayProviderSelection("4", providers)).toBeUndefined();
+    expect(parseRelayProviderSelection("", providers)).toBeUndefined();
   });
 });

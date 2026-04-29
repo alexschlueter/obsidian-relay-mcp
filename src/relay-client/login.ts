@@ -6,6 +6,7 @@ import PocketBase, {
 import { DEFAULT_RELAY_API_URL } from "./config";
 
 const DEFAULT_RELAY_AUTH_URL = "https://auth.system3.md";
+export const DEFAULT_RELAY_LOGIN_PROVIDERS = ["github", "google", "microsoft", "discord", "oidc"] as const;
 
 export interface RelayLoginClientOptions {
   apiUrl?: string;
@@ -98,6 +99,13 @@ export class RelayLoginClient {
       provider: provider.name,
       redirectUrl,
     };
+  }
+
+  async listOAuthProviders(): Promise<string[]> {
+    const authMethods = await this.pb.collection("users").listAuthMethods({
+      fetch: this.fetchImpl,
+    });
+    return authMethods.authProviders.map((provider) => provider.name).sort();
   }
 
   async loginWithOAuth(

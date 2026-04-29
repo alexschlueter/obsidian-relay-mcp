@@ -19,7 +19,6 @@ you want an AI coding or writing agent to work with those notes through MCP.
 
 ## Limitations
 
-- Only github login for now
 - The MCP server does not (yet) expose file creation, rename, delete operations
 - Currently restricted to one configured relayId and folderId
 
@@ -27,15 +26,25 @@ you want an AI coding or writing agent to work with those notes through MCP.
 
 - Node.js 22 or newer.
 - Access to a Relay account and shared folder.
-- A Relay bearer token, usually created by the GitHub login helper.
+- A Relay bearer token, usually created by the login helper.
 
 ## Quick Start
 
-Log in to Relay:
+Log in to Relay. The login command asks the auth gateway which providers are
+available, then lets you choose one interactively:
+
+```bash
+npx -y obsidian-relay-mcp login
+```
+
+You can also select a provider directly, e.g.
 
 ```bash
 npx -y obsidian-relay-mcp login:github
 ```
+
+Use `npx -y obsidian-relay-mcp login --list-providers` to see the providers
+returned by your configured Relay auth service.
 
 Choose the Relay and shared folder to expose:
 

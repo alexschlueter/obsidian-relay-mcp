@@ -8,13 +8,16 @@ const HELP_TEXT = `obsidian-relay-mcp
 Usage:
   obsidian-relay-mcp [stdio]
   obsidian-relay-mcp http
-  obsidian-relay-mcp login:github [--print-env]
+  obsidian-relay-mcp login [--print-env]
+  obsidian-relay-mcp login:<provider> [--print-env]
+  obsidian-relay-mcp login --list-providers
   obsidian-relay-mcp choose-target
 
 Commands:
   stdio          Run the MCP server over stdio. This is the default.
   http           Run the MCP server over Streamable HTTP.
-  login:github   Log in to Relay with GitHub and save .relay-client.json.
+  login          Choose a Relay login provider interactively and save .relay-client.json.
+  login:<provider>  Log in with a specific provider without prompting.
   choose-target  Choose the Relay and shared folder saved in .relay-client.json.
 `;
 
@@ -39,13 +42,17 @@ async function main(): Promise<void> {
       console.error(`obsidian-relay-mcp Streamable HTTP listening at ${server.url}`);
       return;
     }
-    case "login:github":
-      await (await import("./relay-github-login")).runRelayGithubLogin();
+    case "login":
+      await (await import("./relay-login")).runRelayLogin();
       return;
     case "choose-target":
       await (await import("./relay-choose-target")).runRelayChooseTarget();
       return;
     default:
+      if (command.startsWith("login:")) {
+        await (await import("./relay-login")).runRelayLogin();
+        return;
+      }
       throw new Error(`Unknown command "${rawCommand}". Run obsidian-relay-mcp --help.`);
   }
 }
@@ -57,8 +64,8 @@ function normalizeCommand(command: string | undefined): string {
   if (command === "-h" || command === "--help" || command === "help") {
     return "help";
   }
-  if (command === "login" || command === "github-login") {
-    return "login:github";
+  if (command === "login") {
+    return "login";
   }
   if (command === "choose" || command === "target") {
     return "choose-target";
