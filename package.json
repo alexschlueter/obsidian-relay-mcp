@@ -1,6 +1,6 @@
 {
   "name": "obsidian-relay-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "MCP server and TypeScript client for reading and editing Relay-backed Obsidian notes conflict-free.",
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
