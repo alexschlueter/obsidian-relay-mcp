@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG,
   DEFAULT_RELAY_API_URL,
   DEFAULT_RELAY_CLIENT_CONFIG_FILENAME,
   getDefaultRelayClientUserConfigPath,
@@ -83,6 +84,28 @@ describe("relay-client config", () => {
       relayId: "relay-guid",
     });
     expect(fs.statSync(configPath).mode & 0o777).toBe(RELAY_CLIENT_CONFIG_FILE_MODE);
+  });
+
+  it("populates attachment defaults when saving config", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-relay-config-defaults-"));
+    tempDirs.push(tempDir);
+
+    const env = {
+      ...process.env,
+      RELAY_CLIENT_CONFIG: path.join(tempDir, "relay-config.json"),
+    };
+
+    const saved = saveRelayClientFileConfig(
+      {
+        bearerToken: "token-123",
+      },
+      { env },
+    );
+
+    expect(saved.config?.attachments).toEqual(DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG);
+    expect(loadRelayClientFileConfig({ env }).config?.attachments).toEqual(
+      DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG,
+    );
   });
 
   it("uses the saved config plus the default Relay API url when env vars are absent", async () => {

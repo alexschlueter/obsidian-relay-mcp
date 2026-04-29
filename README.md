@@ -145,7 +145,7 @@ Example config:
 }
 ```
 
-Attachment inline content is disabled by default. Enable only the content types
+Attachment inline content is enabled by default for text, but disabled for images and audio. Enable only the content types
 you want agents to receive directly. Use the `max...` options to prevent using too many tokens in context.
 
 ## MCP Tools

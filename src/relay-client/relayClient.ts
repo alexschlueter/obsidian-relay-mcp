@@ -1,7 +1,12 @@
 import * as Y from "yjs";
 import { ClientToken, RelayAuthClient, RelayAuthClientOptions } from "./auth";
 import { applyCodexUpdatePatch } from "./codexPatch";
-import { DEFAULT_RELAY_API_URL, loadRelayClientFileConfig, RelayAttachmentContentConfig } from "./config";
+import {
+  DEFAULT_RELAY_API_URL,
+  DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG,
+  loadRelayClientFileConfig,
+  RelayAttachmentContentConfig,
+} from "./config";
 import { LoadedTextDocument, RelayDocClient } from "./docClient";
 import { RelayFileClient } from "./fileClient";
 import { FolderEntry, FolderIndex, normalizeRelayPath, toS3Resource } from "./folderIndex";
@@ -1326,7 +1331,7 @@ function attachmentIncludeKind(
   contentType: string | undefined,
   options: RelayReadAttachmentOptions,
 ): AttachmentIncludeKind | undefined {
-  if (options.includeTextContent === true && isTextAttachment(filePath, contentType)) {
+  if (options.includeTextContent !== false && isTextAttachment(filePath, contentType)) {
     return "text";
   }
   if (options.includeImageContent === true && contentType?.toLocaleLowerCase().startsWith("image/")) {
@@ -1378,12 +1383,21 @@ function normalizeAttachmentContentConfig(
   config: RelayAttachmentContentConfig | undefined,
 ): Required<RelayAttachmentContentConfig> {
   return {
-    includeTextContent: config?.includeTextContent === true,
-    includeImageContent: config?.includeImageContent === true,
-    includeAudioContent: config?.includeAudioContent === true,
-    maxTextChars: normalizePositiveInteger(config?.maxTextChars, DEFAULT_ATTACHMENT_MAX_TEXT_CHARS),
-    maxImageContentMB: normalizePositiveNumber(config?.maxImageContentMB, DEFAULT_ATTACHMENT_MAX_IMAGE_CONTENT_MB),
-    maxAudioContentMB: normalizePositiveNumber(config?.maxAudioContentMB, DEFAULT_ATTACHMENT_MAX_AUDIO_CONTENT_MB),
+    includeTextContent: config?.includeTextContent ?? DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG.includeTextContent,
+    includeImageContent: config?.includeImageContent ?? DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG.includeImageContent,
+    includeAudioContent: config?.includeAudioContent ?? DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG.includeAudioContent,
+    maxTextChars: normalizePositiveInteger(
+      config?.maxTextChars,
+      DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG.maxTextChars,
+    ),
+    maxImageContentMB: normalizePositiveNumber(
+      config?.maxImageContentMB,
+      DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG.maxImageContentMB,
+    ),
+    maxAudioContentMB: normalizePositiveNumber(
+      config?.maxAudioContentMB,
+      DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG.maxAudioContentMB,
+    ),
   };
 }
 
@@ -1442,9 +1456,6 @@ const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "yml",
 ]);
 
-const DEFAULT_ATTACHMENT_MAX_TEXT_CHARS = 2000;
-const DEFAULT_ATTACHMENT_MAX_IMAGE_CONTENT_MB = 2;
-const DEFAULT_ATTACHMENT_MAX_AUDIO_CONTENT_MB = 2;
 const DEFAULT_LIST_FILES_MAX_RESULTS = 50;
 const MAX_LIST_FILES_MAX_RESULTS = 200;
 const RELAY_HANDLE_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";

@@ -7,6 +7,14 @@ export const DEFAULT_RELAY_CLIENT_CONFIG_FILENAME = ".relay-client.json";
 export const DEFAULT_RELAY_CLIENT_USER_CONFIG_DIRNAME = "obsidian-relay-mcp";
 export const DEFAULT_RELAY_CLIENT_USER_CONFIG_FILENAME = "config.json";
 export const RELAY_CLIENT_CONFIG_FILE_MODE = 0o600;
+export const DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG: Required<RelayAttachmentContentConfig> = {
+  includeTextContent: true,
+  includeImageContent: false,
+  includeAudioContent: false,
+  maxTextChars: 2000,
+  maxImageContentMB: 2,
+  maxAudioContentMB: 2,
+};
 
 export interface RelayClientFileConfig {
   apiUrl?: string;
@@ -96,9 +104,15 @@ export function saveRelayClientFileConfig(
   options: RelayClientConfigPathOptions = {},
 ): RelayClientFileConfigResult {
   const loaded = loadRelayClientFileConfig(options);
+  const cleanedPatch = removeUndefinedValues(patch);
   const merged: RelayClientFileConfig = {
     ...(loaded.config ?? {}),
-    ...removeUndefinedValues(patch),
+    ...cleanedPatch,
+    attachments: {
+      ...DEFAULT_RELAY_ATTACHMENT_CONTENT_CONFIG,
+      ...(loaded.config?.attachments ?? {}),
+      ...(cleanedPatch.attachments ?? {}),
+    },
     updatedAt: new Date().toISOString(),
   };
 
