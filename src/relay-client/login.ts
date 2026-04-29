@@ -170,23 +170,7 @@ export function resolveRelayAuthUrl(options: { apiUrl?: string; authUrl?: string
     return stripTrailingSlash(options.authUrl);
   }
 
-  if (!options.apiUrl) {
-    return DEFAULT_RELAY_AUTH_URL;
-  }
-
-  const apiUrl = new URL(options.apiUrl);
-  apiUrl.pathname = "";
-  apiUrl.search = "";
-  apiUrl.hash = "";
-
-  if (apiUrl.hostname.startsWith("api.")) {
-    apiUrl.hostname = `auth.${apiUrl.hostname.slice(4)}`;
-    return stripTrailingSlash(apiUrl.toString());
-  }
-
-  throw new Error(
-    `Unable to infer RELAY_AUTH_URL from ${options.apiUrl}. Please set RELAY_AUTH_URL explicitly.`,
-  );
+  return DEFAULT_RELAY_AUTH_URL;
 }
 
 export function buildRelayBearerTokenExports(input: RelayEnvExportInput): string {

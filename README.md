@@ -118,7 +118,8 @@ Common environment variables:
 
 - `RELAY_CLIENT_CONFIG`: explicit JSON config path.
 - `RELAY_API_URL`: Relay control-plane API URL. Defaults to `https://api.system3.md`.
-- `RELAY_AUTH_URL`: Relay auth URL. Usually inferred from `RELAY_API_URL`.
+- `RELAY_AUTH_URL`: Relay auth URL. Defaults to the System3 auth gateway
+  (`https://auth.system3.md`); set this only for a nonstandard auth service.
 - `RELAY_BEARER_TOKEN`: Relay bearer token.
 - `RELAY_ID`: default Relay id.
 - `RELAY_FOLDER_ID`: default shared folder id.

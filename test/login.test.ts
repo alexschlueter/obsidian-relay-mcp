@@ -15,8 +15,8 @@ describe("relay login helpers", () => {
     ).toBe("https://custom-auth.example.com");
   });
 
-  it("derives the default auth url from the api url", () => {
-    expect(resolveRelayAuthUrl({ apiUrl: "https://api.system3.md" })).toBe(
+  it("uses the default auth gateway when auth url is omitted", () => {
+    expect(resolveRelayAuthUrl({ apiUrl: "https://custom-api.example.com" })).toBe(
       "https://auth.system3.md",
     );
   });

@@ -4,5 +4,3 @@
 - install instructions in SKILL.md (cf other clawhub skills)
 - more login options other than github
 - describe SKILL.md + install in readme
-- RELAY_AUTH_URL inferred from api url doesnt make sense in readme? auth prob always system3 gateway
-- populate config with default vals at start for easier discoverability (attachments)
