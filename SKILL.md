@@ -36,15 +36,22 @@ read_text { path: "Projects/Meeting.md", ttlSeconds: 60 }
 apply_patch {
   patchHandle: "abc12",
   path: "Projects/Meeting.md",
-  patch: "*** Begin Patch\n*** Update File: Projects/Meeting.md\n@@\n-old\n+new\n*** End Patch"
+  patch: "*** Begin Patch\n*** Update File: Projects/Meeting.md\n@@ ## Decisions\n context line 1\n context line 2\n context line 3\n-old line to remove\n+new line to add\n context line 4\n context line 5\n context line 6\n*** End Patch"
 }
 ```
 
 Patch rules:
 
 - Match against the text returned by `read_text`; do not guess unseen content.
-- Prefer one clear file patch per note. Include enough unchanged context.
 - If a patch handle is expired or unknown, call `read_text` again.
+- The patch must start with `*** Begin Patch` and end with `*** End Patch`.
+- Use exactly one `*** Update File: <path>` operation.
+- Multiple hunks per patch are supported and are applied in order.
+- Each hunk starts with `@@`; text after `@@` is an optional search hint, such as a Markdown heading.
+- Hunk lines begin with one prefix character: space for unchanged context, `-` for removed text, `+` for added text.
+- Include about 3 unchanged context lines before and after each change when possible.
+- If nearby text is repeated, add one or more specific `@@` hints to identify the right section.
+- Match the current note text exactly. For long single-line paragraphs, the whole changed line must be replaced.
 
 ### Mode B: Live collaboration
 
@@ -173,7 +180,10 @@ Patch a known note quickly:
 
 ```text
 read_text { path: "Notes/Inbox.md" }
-apply_patch { patchHandle: "h7k2p", patch: "...Codex update patch..." }
+apply_patch {
+  patchHandle: "h7k2p",
+  patch: "*** Begin Patch\n*** Update File: Notes/Inbox.md\n@@ ## Today\n context line 1\n context line 2\n context line 3\n-old line to remove\n+new line to add\n context line 4\n context line 5\n context line 6\n*** End Patch"
+}
 ```
 
 Edit where a collaborator is working:

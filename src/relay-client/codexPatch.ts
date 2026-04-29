@@ -132,8 +132,8 @@ export function applyCodexUpdatePatch(
   const lineEnding = sourceText.includes("\r\n") ? "\r\n" : "\n";
   const hadTrailingNewline = sourceText.endsWith("\n");
   const sourceLines = splitTextLines(sourceText);
-  const nextLines = [...sourceLines];
-  let searchStart = 0;
+  const replacements: Array<{ newLines: string[]; oldLength: number; startIndex: number }> = [];
+  let lineIndex = 0;
 
   for (const hunk of parsed.hunks) {
     const oldLines = hunk.lines
@@ -143,20 +143,25 @@ export function applyCodexUpdatePatch(
       .filter((line) => line.kind !== "delete")
       .map((line) => line.text);
 
-    const narrowedSearchStart = narrowSearchStart(nextLines, searchStart, hunk.headers);
+    const narrowedSearchStart = narrowSearchStart(sourceLines, lineIndex, hunk.headers);
     const matchIndex =
       oldLines.length === 0
         ? narrowedSearchStart
-        : findMatchingSequence(nextLines, oldLines, narrowedSearchStart);
+        : findMatchingSequence(sourceLines, oldLines, narrowedSearchStart);
 
     if (matchIndex < 0) {
       throw new Error("Codex patch hunk did not match the current document text");
     }
 
-    nextLines.splice(matchIndex, oldLines.length, ...newLines);
-    searchStart = matchIndex + newLines.length;
+    replacements.push({
+      startIndex: matchIndex,
+      oldLength: oldLines.length,
+      newLines,
+    });
+    lineIndex = matchIndex + oldLines.length;
   }
 
+  const nextLines = applyReplacements(sourceLines, replacements);
   const resultText = joinTextLines(nextLines, lineEnding, hadTrailingNewline);
 
   return {
@@ -164,6 +169,20 @@ export function applyCodexUpdatePatch(
     resultText,
     changed: resultText !== sourceText,
   };
+}
+
+function applyReplacements(
+  sourceLines: string[],
+  replacements: Array<{ newLines: string[]; oldLength: number; startIndex: number }>,
+): string[] {
+  const nextLines = [...sourceLines];
+  const sorted = [...replacements].sort((left, right) => right.startIndex - left.startIndex);
+
+  for (const replacement of sorted) {
+    nextLines.splice(replacement.startIndex, replacement.oldLength, ...replacement.newLines);
+  }
+
+  return nextLines;
 }
 
 function splitTextLines(text: string): string[] {
@@ -201,7 +220,7 @@ function narrowSearchStart(lines: string[], searchStart: number, headers: string
       (line, lineIndex) => lineIndex >= narrowedSearchStart && line.includes(needle),
     );
     if (index >= 0) {
-      narrowedSearchStart = index;
+      narrowedSearchStart = index + 1;
     }
   }
 
@@ -215,17 +234,51 @@ function findMatchingSequence(haystack: string[], needle: string[], startIndex: 
 
   const lastStart = haystack.length - needle.length;
   for (let index = startIndex; index <= lastStart; index += 1) {
-    let matches = true;
-    for (let offset = 0; offset < needle.length; offset += 1) {
-      if (haystack[index + offset] !== needle[offset]) {
-        matches = false;
-        break;
-      }
+    if (sequenceMatches(haystack, needle, index, (value) => value)) {
+      return index;
     }
-    if (matches) {
+  }
+
+  for (let index = startIndex; index <= lastStart; index += 1) {
+    if (sequenceMatches(haystack, needle, index, (value) => value.trimEnd())) {
+      return index;
+    }
+  }
+
+  for (let index = startIndex; index <= lastStart; index += 1) {
+    if (sequenceMatches(haystack, needle, index, (value) => value.trim())) {
+      return index;
+    }
+  }
+
+  for (let index = startIndex; index <= lastStart; index += 1) {
+    if (sequenceMatches(haystack, needle, index, normalizeSearchLine)) {
       return index;
     }
   }
 
   return -1;
+}
+
+function sequenceMatches(
+  haystack: string[],
+  needle: string[],
+  startIndex: number,
+  normalize: (value: string) => string,
+): boolean {
+  for (let offset = 0; offset < needle.length; offset += 1) {
+    if (normalize(haystack[startIndex + offset] ?? "") !== normalize(needle[offset] ?? "")) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeSearchLine(value: string): string {
+  return value
+    .trim()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u00A0\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000]/g, " ");
 }

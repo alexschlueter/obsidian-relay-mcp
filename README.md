@@ -198,9 +198,15 @@ const read = await relay.readText("Notes/Plan.md", {
 const patch = [
   "*** Begin Patch",
   "*** Update File: Notes/Plan.md",
-  "@@",
-  "-old text",
-  "+new text",
+  "@@ ## Launch Plan",
+  " Owner: Alex",
+  " Review date: Friday",
+  " Status: Draft",
+  "-The release notes will be written after the demo.",
+  "+The release notes will be written before the demo.",
+  " The shared folder access has been confirmed.",
+  " The test invite is ready to send.",
+  " Next review is Monday.",
   "*** End Patch",
 ].join("\n");
 

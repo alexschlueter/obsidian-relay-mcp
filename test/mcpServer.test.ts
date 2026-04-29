@@ -222,6 +222,20 @@ describe("Relay MCP server", () => {
 
   it("maps apply_patch camelCase args to RelayClient patchText", async () => {
     const fakeClient = createFakeRelayClient();
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: Notes/Test.md",
+      "@@ ## Launch Plan",
+      " Owner: Alex",
+      " Review date: Friday",
+      " Status: Draft",
+      "-The release notes will be written after the demo.",
+      "+The release notes will be written before the demo.",
+      " The shared folder access has been confirmed.",
+      " The test invite is ready to send.",
+      " Next review is Monday.",
+      "*** End Patch",
+    ].join("\n");
 
     await withMcpClient(fakeClient, async ({ client }) => {
       const result = await client.callTool({
@@ -229,7 +243,7 @@ describe("Relay MCP server", () => {
         arguments: {
           patchHandle: "abcde",
           path: "Notes/Test.md",
-          patch: "*** Begin Patch\n*** Update File: Notes/Test.md\n@@\n-old\n+new\n*** End Patch",
+          patch,
           returnResult: false,
         },
       });
@@ -243,7 +257,7 @@ describe("Relay MCP server", () => {
         args: [
           "abcde",
           "Notes/Test.md",
-          "*** Begin Patch\n*** Update File: Notes/Test.md\n@@\n-old\n+new\n*** End Patch",
+          patch,
           { returnResult: false },
         ],
       });
